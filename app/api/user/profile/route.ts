@@ -1,55 +1,71 @@
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { updateProfileSchema } from '@/lib/validations'
+
 /**
- * PATCH /api/user/profile — Update user profile fields.
- * Supports: name, locale, theme, onboardingDone.
+ * GET /api/user/profile
+ * Returns the current user's profile.
  */
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
-
-export async function PATCH(req: Request) {
+export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await req.json();
-
-    // Whitelist allowed fields
-    const allowedFields: Record<string, unknown> = {};
-    if (typeof body.name === "string") allowedFields.name = body.name.trim();
-    if (typeof body.locale === "string" && ["pt-BR", "en"].includes(body.locale)) {
-      allowedFields.locale = body.locale;
-    }
-    if (typeof body.theme === "string" && ["light", "dark", "system"].includes(body.theme)) {
-      allowedFields.theme = body.theme;
-    }
-    if (typeof body.onboardingDone === "boolean") {
-      allowedFields.onboardingDone = body.onboardingDone;
-    }
-
-    if (Object.keys(allowedFields).length === 0) {
-      return NextResponse.json({ error: "no-valid-fields" }, { status: 400 });
-    }
-
-    const user = await db.user.update({
+    const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      data: allowedFields,
       select: {
         id: true,
-        name: true,
         email: true,
+        name: true,
         image: true,
         locale: true,
         theme: true,
+        apiKeyMasked: true,
+        apiKeyValid: true,
         onboardingDone: true,
+        createdAt: true,
       },
-    });
+    })
 
-    return NextResponse.json(user);
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+    return NextResponse.json({ data: user })
   } catch (error) {
-    console.error("[PROFILE_PATCH_ERROR]", error);
-    return NextResponse.json({ error: "internal-error" }, { status: 500 });
+    console.error('Get profile error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
+ * PATCH /api/user/profile
+ * Updates the current user's profile (name, locale, theme).
+ */
+export async function PATCH(req: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const body = await req.json()
+    const parsed = updateProfileSchema.safeParse(body)
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      )
+    }
+
+    const user = await prisma.user.update({
+      where: { id: session.user.id },
+      data: parsed.data,
+      select: { id: true, name: true, locale: true, theme: true },
+    })
+
+    return NextResponse.json({ data: user })
+  } catch (error) {
+    console.error('Update profile error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

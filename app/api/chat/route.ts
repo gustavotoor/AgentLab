@@ -1,131 +1,158 @@
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { streamText } from 'ai'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { decrypt } from '@/lib/crypto'
+import { createModel } from '@/lib/ai'
+
+export const maxDuration = 60
+
 /**
- * POST /api/chat — Streaming chat endpoint using Vercel AI SDK.
- * Flow: authenticate → verify agent ownership → decrypt user API key →
- * create/get conversation → call Anthropic with system prompt → stream response →
- * save messages to DB after stream completes.
+ * POST /api/chat
+ * Streaming chat endpoint. Accepts agentId + conversationId + message,
+ * loads history, calls Anthropic via user's BYOK, streams response,
+ * and saves both messages on completion.
  */
-import { streamText } from "ai";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { decrypt } from "@/lib/crypto";
-import { getAnthropicModel } from "@/lib/ai";
-
-export const maxDuration = 60;
-
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return new Response("Unauthorized", { status: 401 });
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { agentId, conversationId, message } = await req.json()
+
+    if (!agentId || !message) {
+      return NextResponse.json({ error: 'agentId and message are required' }, { status: 400 })
     }
 
-    const { messages, agentId, conversationId } = await req.json();
-
-    if (!agentId || !messages || !Array.isArray(messages)) {
-      return new Response("Bad request", { status: 400 });
-    }
-
-    // Verify agent ownership
-    const agent = await db.agent.findFirst({
+    // Verify agent belongs to user
+    const agent = await prisma.agent.findFirst({
       where: { id: agentId, userId: session.user.id },
-    });
+    })
 
-    if (!agent) {
-      return new Response("Agent not found", { status: 404 });
-    }
+    if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
 
     // Get user's API key
-    const user = await db.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { apiKeyEncrypted: true, apiKeyValid: true },
-    });
+      select: { apiKeyEncrypted: true, apiKeyValid: true, name: true },
+    })
 
-    // Try user's key first, then fallback to system key
-    let apiKey: string | undefined;
-
-    if (user?.apiKeyEncrypted && user.apiKeyValid) {
-      try {
-        apiKey = decrypt(user.apiKeyEncrypted);
-      } catch {
-        console.error("[CHAT] Failed to decrypt user API key");
-      }
+    if (!user?.apiKeyEncrypted) {
+      return NextResponse.json(
+        { error: 'No API key configured. Please add your Anthropic API key in settings.' },
+        { status: 402 }
+      )
     }
 
-    if (!apiKey) {
-      apiKey = process.env.ANTHROPIC_API_KEY;
-    }
-
-    if (!apiKey) {
-      return new Response("No API key configured. Add your Anthropic API key in Settings.", {
-        status: 403,
-      });
+    // Decrypt API key
+    let apiKey: string
+    try {
+      apiKey = decrypt(user.apiKeyEncrypted)
+    } catch {
+      return NextResponse.json({ error: 'Failed to decrypt API key' }, { status: 500 })
     }
 
     // Get or create conversation
-    let activeConversationId = conversationId;
-
-    if (!activeConversationId) {
-      // Create new conversation with title from first user message
-      const firstMessage = messages.find((m: { role: string }) => m.role === "user");
-      const title = firstMessage
-        ? (firstMessage.content as string).slice(0, 100)
-        : "New conversation";
-
-      const conversation = await db.conversation.create({
-        data: {
-          agentId,
-          title,
-        },
-      });
-      activeConversationId = conversation.id;
-
-      // Increment agent chat count
-      await db.agent.update({
-        where: { id: agentId },
-        data: { totalChats: { increment: 1 } },
-      });
+    let convoId = conversationId
+    if (!convoId) {
+      const convo = await prisma.conversation.create({
+        data: { agentId, title: null },
+      })
+      convoId = convo.id
+    } else {
+      // Verify conversation belongs to this agent
+      const convo = await prisma.conversation.findFirst({
+        where: { id: convoId, agentId },
+      })
+      if (!convo) {
+        const newConvo = await prisma.conversation.create({
+          data: { agentId, title: null },
+        })
+        convoId = newConvo.id
+      }
     }
 
-    // Save user message to DB
-    const lastUserMessage = messages[messages.length - 1];
-    if (lastUserMessage?.role === "user") {
-      await db.message.create({
-        data: {
-          conversationId: activeConversationId,
-          role: "user",
-          content: lastUserMessage.content as string,
-        },
-      });
-    }
+    // Load conversation history (last 20 messages)
+    const history = await prisma.message.findMany({
+      where: { conversationId: convoId },
+      orderBy: { createdAt: 'asc' },
+      take: 20,
+    })
 
-    // Create the Anthropic model with user's API key
-    const model = getAnthropicModel(apiKey);
+    // Save user message
+    await prisma.message.create({
+      data: {
+        conversationId: convoId,
+        role: 'user',
+        content: message,
+      },
+    })
 
-    // Stream the response
+    // Build messages array for the AI
+    const messages = [
+      ...history.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+      { role: 'user' as const, content: message },
+    ]
+
+    // Create AI model with user's key
+    const model = createModel(apiKey)
+
+    // Stream response
     const result = streamText({
       model,
       system: agent.systemPrompt,
       messages,
       onFinish: async ({ text }) => {
-        // Save assistant message to DB after stream completes
-        await db.message.create({
-          data: {
-            conversationId: activeConversationId,
-            role: "assistant",
-            content: text,
-          },
-        });
-      },
-    });
+        try {
+          // Save assistant message
+          await prisma.message.create({
+            data: {
+              conversationId: convoId,
+              role: 'assistant',
+              content: text,
+            },
+          })
 
-    return result.toDataStreamResponse({
-      headers: {
-        "X-Conversation-Id": activeConversationId,
+          // Set conversation title from first message if not set
+          const convo = await prisma.conversation.findUnique({
+            where: { id: convoId },
+            select: { title: true, _count: { select: { messages: true } } },
+          })
+
+          if (!convo?.title && (convo?._count?.messages ?? 0) <= 2) {
+            const title = message.slice(0, 60) + (message.length > 60 ? '...' : '')
+            await prisma.conversation.update({
+              where: { id: convoId },
+              data: { title },
+            })
+          }
+
+          // Increment agent chat count
+          await prisma.agent.update({
+            where: { id: agentId },
+            data: { totalChats: { increment: 1 } },
+          })
+        } catch (err) {
+          console.error('Failed to save assistant message:', err)
+        }
       },
-    });
+    })
+
+    // Add conversationId to response headers
+    const response = result.toDataStreamResponse()
+    const headers = new Headers(response.headers)
+    headers.set('X-Conversation-Id', convoId)
+
+    return new Response(response.body, {
+      status: response.status,
+      headers,
+    })
   } catch (error) {
-    console.error("[CHAT_ERROR]", error);
-    return new Response("Internal server error", { status: 500 });
+    console.error('Chat error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

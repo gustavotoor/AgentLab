@@ -1,14 +1,21 @@
-/**
- * next-intl server request configuration.
- * Loads the correct message file based on the user's locale cookie.
- */
-import { getRequestConfig } from "next-intl/server";
-import { getUserLocale } from "./locale";
+import { getRequestConfig } from 'next-intl/server'
+import { cookies } from 'next/headers'
+import { defaultLocale, locales, type Locale } from './config'
 
+/**
+ * next-intl server-side request configuration.
+ * Reads locale from cookie, falling back to the default locale.
+ * Does NOT use URL-based routing — locale is determined purely from cookies.
+ */
 export default getRequestConfig(async () => {
-  const locale = await getUserLocale();
+  const cookieStore = await cookies()
+  const cookieLocale = cookieStore.get('locale')?.value as Locale | undefined
+
+  const locale: Locale =
+    cookieLocale && locales.includes(cookieLocale) ? cookieLocale : defaultLocale
+
   return {
     locale,
     messages: (await import(`../messages/${locale}.json`)).default,
-  };
-});
+  }
+})

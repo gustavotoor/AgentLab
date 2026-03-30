@@ -1,50 +1,44 @@
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+
+type RouteParams = { params: Promise<{ agentId: string }> }
+
 /**
- * GET /api/conversations/[agentId] — List all conversations for an agent.
- * Returns conversations with message count, ordered by most recent.
+ * GET /api/conversations/[agentId]
+ * Returns all conversations for an agent (must belong to current user).
  */
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
-
-interface RouteParams {
-  params: Promise<{ agentId: string }>;
-}
-
 export async function GET(_req: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { agentId } = await params;
+    const { agentId } = await params
 
-    // Verify agent ownership
-    const agent = await db.agent.findFirst({
+    // Verify agent belongs to user
+    const agent = await prisma.agent.findFirst({
       where: { id: agentId, userId: session.user.id },
-      select: { id: true },
-    });
+    })
 
-    if (!agent) {
-      return NextResponse.json({ error: "not-found" }, { status: 404 });
-    }
+    if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
 
-    const conversations = await db.conversation.findMany({
+    const conversations = await prisma.conversation.findMany({
       where: { agentId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        title: true,
-        createdAt: true,
-        updatedAt: true,
+      orderBy: { createdAt: 'desc' },
+      include: {
         _count: { select: { messages: true } },
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { content: true, createdAt: true, role: true },
+        },
       },
-    });
+    })
 
-    return NextResponse.json(conversations);
+    return NextResponse.json({ data: conversations })
   } catch (error) {
-    console.error("[CONVERSATIONS_GET_ERROR]", error);
-    return NextResponse.json({ error: "internal-error" }, { status: 500 });
+    console.error('Get conversations error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

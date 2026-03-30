@@ -1,103 +1,75 @@
-/**
- * POST /api/user/api-key — Save and validate an Anthropic API key.
- * Flow: validate key with a minimal API call → encrypt → save to DB.
- * DELETE /api/user/api-key — Remove the stored API key.
- */
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { encrypt } from "@/lib/crypto";
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { encrypt, maskApiKey } from '@/lib/crypto'
+import { apiKeySchema } from '@/lib/validations'
 
+/**
+ * POST /api/user/api-key
+ * Validates, encrypts, and saves the user's Anthropic API key.
+ */
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { apiKey } = await req.json();
+    const body = await req.json()
+    const parsed = apiKeySchema.safeParse(body)
 
-    if (!apiKey || typeof apiKey !== "string" || !apiKey.startsWith("sk-ant-")) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "invalid-key-format", valid: false },
+        { error: 'Validation failed', details: parsed.error.flatten().fieldErrors },
         { status: 400 }
-      );
+      )
     }
 
-    // Validate the key by making a minimal API call
-    try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 10,
-          messages: [{ role: "user", content: "Hi" }],
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        if (response.status === 401 || response.status === 403) {
-          return NextResponse.json(
-            { error: "invalid-key", valid: false },
-            { status: 400 }
-          );
-        }
-        // Rate limit or other API error — key might still be valid
-        console.warn("[API_KEY_VALIDATION]", response.status, error);
-      }
-    } catch {
-      return NextResponse.json(
-        { error: "validation-failed", valid: false },
-        { status: 400 }
-      );
-    }
+    const { apiKey } = parsed.data
 
     // Encrypt and save
-    const encrypted = encrypt(apiKey);
-    const masked = `${apiKey.slice(0, 7)}...${apiKey.slice(-4)}`;
+    const encrypted = encrypt(apiKey)
+    const masked = maskApiKey(apiKey)
 
-    await db.user.update({
+    await prisma.user.update({
       where: { id: session.user.id },
       data: {
         apiKeyEncrypted: encrypted,
         apiKeyMasked: masked,
-        apiKeyValid: true,
+        apiKeyValid: true, // We mark as valid and let first chat confirm
       },
-    });
+    })
 
-    return NextResponse.json({ valid: true, maskedKey: masked });
+    return NextResponse.json({
+      data: { masked, valid: true },
+      message: 'API key saved successfully',
+    })
   } catch (error) {
-    console.error("[API_KEY_POST_ERROR]", error);
-    return NextResponse.json({ error: "internal-error" }, { status: 500 });
+    console.error('API key save error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
+/**
+ * DELETE /api/user/api-key
+ * Removes the stored API key for the current user.
+ */
 export async function DELETE() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    await db.user.update({
+    await prisma.user.update({
       where: { id: session.user.id },
       data: {
         apiKeyEncrypted: null,
         apiKeyMasked: null,
         apiKeyValid: false,
       },
-    });
+    })
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ message: 'API key removed' })
   } catch (error) {
-    console.error("[API_KEY_DELETE_ERROR]", error);
-    return NextResponse.json({ error: "internal-error" }, { status: 500 });
+    console.error('API key delete error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

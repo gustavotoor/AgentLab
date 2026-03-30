@@ -1,0 +1,405 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
+import { useTranslations } from 'next-intl'
+import { useLocale } from '@/hooks/use-locale'
+import { useTheme } from 'next-themes'
+import { Loader2, Save, Eye, EyeOff, CheckCircle2, AlertCircle, Trash2, ExternalLink } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Separator } from '@/components/ui/separator'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { toast } from '@/hooks/use-toast'
+import { Toaster } from '@/components/ui/toaster'
+import { signOut } from 'next-auth/react'
+
+interface UserData {
+  id: string
+  name: string | null
+  email: string
+  locale: string
+  theme: string
+  apiKeyMasked: string | null
+  apiKeyValid: boolean
+}
+
+interface SettingsTabsProps {
+  user: UserData
+}
+
+/**
+ * Settings page with profile, security, API key, and danger zone tabs.
+ */
+export function SettingsTabs({ user }: SettingsTabsProps) {
+  const t = useTranslations('settings')
+  const { update } = useSession()
+  const router = useRouter()
+  const { switchLocale } = useLocale()
+  const { setTheme } = useTheme()
+
+  // Profile state
+  const [name, setName] = useState(user.name ?? '')
+  const [locale, setLocale] = useState(user.locale)
+  const [theme, setThemeState] = useState(user.theme)
+  const [profileLoading, setProfileLoading] = useState(false)
+
+  // Password state
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordLoading, setPasswordLoading] = useState(false)
+  const [showPasswords, setShowPasswords] = useState(false)
+
+  // API key state
+  const [apiKey, setApiKey] = useState('')
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [apiKeyLoading, setApiKeyLoading] = useState(false)
+  const [apiKeyMasked, setApiKeyMasked] = useState(user.apiKeyMasked)
+  const [apiKeyValid, setApiKeyValid] = useState(user.apiKeyValid)
+
+  // Delete account state
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  const handleProfileSave = async () => {
+    setProfileLoading(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, locale, theme }),
+      })
+
+      if (res.ok) {
+        await update({ name, locale, theme })
+        switchLocale(locale as 'pt-BR' | 'en')
+        setTheme(theme)
+        toast({ title: t('profileUpdated') })
+        router.refresh()
+      } else {
+        const data = await res.json()
+        toast({ title: data.error ?? 'Failed to update profile', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' })
+    } finally {
+      setProfileLoading(false)
+    }
+  }
+
+  const handlePasswordChange = async () => {
+    if (newPassword !== confirmPassword) {
+      toast({ title: 'Passwords do not match', variant: 'destructive' })
+      return
+    }
+    setPasswordLoading(true)
+    try {
+      const res = await fetch('/api/user/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+      })
+
+      if (res.ok) {
+        toast({ title: t('passwordChanged') })
+        setCurrentPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+      } else {
+        const data = await res.json()
+        toast({ title: data.error ?? 'Failed to change password', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' })
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
+  const handleApiKeySave = async () => {
+    if (!apiKey.trim()) return
+    setApiKeyLoading(true)
+    try {
+      const res = await fetch('/api/user/api-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKey.trim() }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setApiKeyMasked(data.data.masked)
+        setApiKeyValid(true)
+        setApiKey('')
+        await update({ apiKeyValid: true })
+        toast({ title: t('apiKeySaved') })
+      } else {
+        const data = await res.json()
+        toast({ title: data.error ?? 'Failed to save API key', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' })
+    } finally {
+      setApiKeyLoading(false)
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    setDeleteLoading(true)
+    try {
+      const res = await fetch('/api/user/delete', { method: 'DELETE' })
+      if (res.ok) {
+        await signOut({ callbackUrl: '/' })
+      } else {
+        toast({ title: 'Failed to delete account', variant: 'destructive' })
+        setDeleteLoading(false)
+      }
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' })
+      setDeleteLoading(false)
+    }
+  }
+
+  return (
+    <>
+      <Toaster />
+      <Tabs defaultValue="profile" className="space-y-6">
+        <TabsList className="w-full">
+          <TabsTrigger value="profile" className="flex-1">{t('profile')}</TabsTrigger>
+          <TabsTrigger value="security" className="flex-1">{t('security')}</TabsTrigger>
+          <TabsTrigger value="apikey" className="flex-1">{t('apiKey')}</TabsTrigger>
+          <TabsTrigger value="danger" className="flex-1">Danger</TabsTrigger>
+        </TabsList>
+
+        {/* Profile tab */}
+        <TabsContent value="profile" className="space-y-6">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('name')}</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t('email')}</Label>
+              <Input value={user.email} disabled className="opacity-60" />
+              <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
+            </div>
+
+            <Separator />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t('language')}</Label>
+                <Select value={locale} onValueChange={setLocale}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pt-BR">🇧🇷 Português (BR)</SelectItem>
+                    <SelectItem value="en">🇺🇸 English</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t('theme')}</Label>
+                <Select value={theme} onValueChange={setThemeState}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="light">{t('themeLight')}</SelectItem>
+                    <SelectItem value="dark">{t('themeDark')}</SelectItem>
+                    <SelectItem value="system">{t('themeSystem')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Button onClick={handleProfileSave} disabled={profileLoading}>
+              {profileLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save changes
+            </Button>
+          </div>
+        </TabsContent>
+
+        {/* Security tab */}
+        <TabsContent value="security" className="space-y-6">
+          <div className="space-y-4">
+            <h3 className="font-semibold">{t('changePassword')}</h3>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>{t('currentPassword')}</Label>
+                <div className="relative">
+                  <Input
+                    type={showPasswords ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswords(!showPasswords)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t('newPassword')}</Label>
+                <Input
+                  type={showPasswords ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t('confirmPassword')}</Label>
+                <Input
+                  type={showPasswords ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+
+            <Button
+              onClick={handlePasswordChange}
+              disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword}
+            >
+              {passwordLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t('changePassword')}
+            </Button>
+          </div>
+        </TabsContent>
+
+        {/* API Key tab */}
+        <TabsContent value="apikey" className="space-y-6">
+          <div className="space-y-4">
+            <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300">{t('byokTitle')}</h3>
+              <p className="text-xs text-blue-700 dark:text-blue-400">{t('byokDesc')}</p>
+              <a
+                href="https://console.anthropic.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t('getApiKey')}
+              </a>
+            </div>
+
+            {/* Current key status */}
+            {apiKeyMasked && (
+              <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/50">
+                {apiKeyValid ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                )}
+                <div>
+                  <p className="text-sm font-medium font-mono">{apiKeyMasked}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {apiKeyValid ? t('apiKeyValid') : t('apiKeyInvalid')}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>{apiKeyMasked ? 'Update API key' : t('anthropicApiKey')}</Label>
+              <div className="relative">
+                <Input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={t('apiKeyPlaceholder')}
+                  className="pr-10 font-mono text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                >
+                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">{t('apiKeyDesc')}</p>
+            </div>
+
+            <Button onClick={handleApiKeySave} disabled={apiKeyLoading || !apiKey.trim()}>
+              {apiKeyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t('saveApiKey')}
+            </Button>
+          </div>
+        </TabsContent>
+
+        {/* Danger zone */}
+        <TabsContent value="danger" className="space-y-6">
+          <div className="rounded-xl border border-destructive/30 p-6 space-y-4">
+            <div>
+              <h3 className="font-semibold text-destructive">{t('dangerZone')}</h3>
+              <p className="text-sm text-muted-foreground mt-1">{t('deleteAccountDesc')}</p>
+            </div>
+
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="destructive">
+                  <Trash2 className="h-4 w-4" />
+                  {t('deleteAccount')}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t('deleteAccount')}</DialogTitle>
+                  <DialogDescription>{t('deleteAccountDesc')}</DialogDescription>
+                </DialogHeader>
+                <p className="text-sm text-muted-foreground">
+                  This will permanently delete your account, all agents, conversations, and messages.
+                  This action cannot be undone.
+                </p>
+                <DialogFooter>
+                  <Button variant="outline">Cancel</Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteAccount}
+                    disabled={deleteLoading}
+                  >
+                    {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {t('deleteAccountConfirm')}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </>
+  )
+}

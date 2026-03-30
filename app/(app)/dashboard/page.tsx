@@ -1,211 +1,167 @@
+import { getServerSession } from 'next-auth'
+import { getTranslations } from 'next-intl/server'
+import Link from 'next/link'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { TopBar } from '@/components/layout/TopBar'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { truncate } from '@/lib/utils'
+import { Plus, Bot, MessageSquare, BarChart3, ArrowRight, Zap } from 'lucide-react'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = { title: 'Dashboard' }
+
 /**
- * Dashboard page — main view after login.
- * Shows welcome message, stats cards, recent agents grid, and quick CTA.
- * Design: Clean grid with warm accent colors, subtle animations.
+ * Dashboard page showing stats and recent agents.
  */
-"use client";
+export default async function DashboardPage() {
+  const session = await getServerSession(authOptions)
+  const t = await getTranslations('dashboard')
 
-import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
-import Link from "next/link";
-import { motion } from "framer-motion";
-import { Bot, MessageSquare, Zap, Plus, ArrowRight, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { AgentCard } from "@/components/agents/AgentCard";
-import { useTranslations } from "next-intl";
-
-interface DashboardData {
-  totalAgents: number;
-  totalConversations: number;
-  messagesToday: number;
-  recentAgents: Array<{
-    id: string;
-    name: string;
-    emoji: string;
-    templateId: string;
-    tone: string;
-    totalChats: number;
-    updatedAt: string;
-  }>;
-}
-
-const fadeIn = {
-  initial: { opacity: 0, y: 10 },
-  animate: { opacity: 1, y: 0 },
-};
-
-export default function DashboardPage() {
-  const t = useTranslations("dashboard");
-  const { data: session } = useSession();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchDashboard() {
-      try {
-        const [agentsRes, conversationsRes] = await Promise.all([
-          fetch("/api/agents"),
-          fetch("/api/conversations/stats"),
-        ]);
-
-        const agents = agentsRes.ok ? await agentsRes.json() : [];
-        const stats = conversationsRes.ok ? await conversationsRes.json() : { total: 0, today: 0 };
-
-        setData({
-          totalAgents: agents.length,
-          totalConversations: stats.total ?? 0,
-          messagesToday: stats.today ?? 0,
-          recentAgents: agents.slice(0, 6),
-        });
-      } catch {
-        setData({
-          totalAgents: 0,
-          totalConversations: 0,
-          messagesToday: 0,
-          recentAgents: [],
-        });
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchDashboard();
-  }, []);
-
-  const firstName = session?.user?.name?.split(" ")[0] ?? "there";
+  const [totalAgents, recentAgents, conversationStats] = await Promise.all([
+    prisma.agent.count({ where: { userId: session!.user.id } }),
+    prisma.agent.findMany({
+      where: { userId: session!.user.id },
+      orderBy: { updatedAt: 'desc' },
+      take: 4,
+      include: { _count: { select: { conversations: true } } },
+    }),
+    prisma.conversation.count({
+      where: { agent: { userId: session!.user.id } },
+    }),
+  ])
 
   const stats = [
-    {
-      icon: Bot,
-      label: t("totalAgents"),
-      value: data?.totalAgents ?? 0,
-      color: "from-amber-400 to-orange-500",
-      bg: "bg-amber-50 dark:bg-amber-900/15",
-    },
-    {
-      icon: MessageSquare,
-      label: t("totalConversations"),
-      value: data?.totalConversations ?? 0,
-      color: "from-blue-400 to-indigo-500",
-      bg: "bg-blue-50 dark:bg-blue-900/15",
-    },
-    {
-      icon: Zap,
-      label: t("messagesToday"),
-      value: data?.messagesToday ?? 0,
-      color: "from-emerald-400 to-teal-500",
-      bg: "bg-emerald-50 dark:bg-emerald-900/15",
-    },
-  ];
+    { label: t('totalAgents'), value: totalAgents, icon: Bot, color: 'text-blue-500' },
+    { label: t('totalConversations'), value: conversationStats, icon: MessageSquare, color: 'text-violet-500' },
+    { label: 'Active API Key', value: session!.user.apiKeyValid ? 'Configured' : 'Not set', icon: Zap, color: session!.user.apiKeyValid ? 'text-emerald-500' : 'text-amber-500', isText: true },
+  ]
+
+  const firstName = session!.user.name?.split(' ')[0] ?? 'there'
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      {/* Welcome */}
-      <motion.div {...fadeIn} transition={{ delay: 0.05 }}>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {t("welcome")}, {firstName} 👋
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Here&apos;s what&apos;s happening with your agents.
-        </p>
-      </motion.div>
+    <div className="flex flex-col h-full overflow-hidden">
+      <TopBar title={t('title')} />
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {stats.map(({ icon: Icon, label, value, color, bg }, i) => (
-          <motion.div
-            key={label}
-            {...fadeIn}
-            transition={{ delay: 0.1 + i * 0.05 }}
-            className="bg-card rounded-2xl border border-border/50 p-5 shadow-sm"
-          >
-            <div className="flex items-center justify-between">
-              <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center`}>
-                <Icon className={`h-5 w-5 bg-gradient-to-r ${color} bg-clip-text`} style={{ color: "var(--amber-500, #f59e0b)" }} />
-              </div>
-            </div>
-            <div className="mt-4">
-              {loading ? (
-                <Skeleton className="h-8 w-16 rounded-lg" />
-              ) : (
-                <p className="text-3xl font-bold tracking-tight">{value}</p>
-              )}
-              <p className="text-sm text-muted-foreground mt-0.5">{label}</p>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Quick action */}
-      <motion.div {...fadeIn} transition={{ delay: 0.25 }}>
-        <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-rose-500/10 rounded-2xl border border-amber-200/30 dark:border-amber-800/20 p-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <Sparkles className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h3 className="font-semibold tracking-tight">{t("quickAction")}</h3>
-              <p className="text-sm text-muted-foreground">
-                Browse templates and create your perfect AI assistant.
-              </p>
-            </div>
+      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+        {/* Welcome */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">
+              {t('welcome', { name: firstName })} 👋
+            </h2>
+            <p className="text-muted-foreground text-sm mt-1">
+              Here&apos;s what&apos;s happening with your agents.
+            </p>
           </div>
-          <Button asChild className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-md shadow-amber-500/15">
-            <Link href="/store">
-              <Plus className="h-4 w-4 mr-2" />
-              {t("createFirst") || "Create Agent"}
+          <Button asChild>
+            <Link href="/agents/new">
+              <Plus className="h-4 w-4" />
+              {t('createAgent')}
             </Link>
           </Button>
         </div>
-      </motion.div>
 
-      {/* Recent agents */}
-      <motion.div {...fadeIn} transition={{ delay: 0.3 }}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold tracking-tight">{t("recentAgents")}</h2>
-          {(data?.totalAgents ?? 0) > 0 && (
-            <Link
-              href="/agents"
-              className="text-sm text-amber-600 dark:text-amber-400 hover:underline inline-flex items-center gap-1"
-            >
-              View all
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          )}
+        {/* Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {stats.map((stat) => {
+            const Icon = stat.icon
+            return (
+              <Card key={stat.label} className="border bg-card">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">{stat.label}</p>
+                      <p className={`text-3xl font-bold mt-1 ${stat.isText ? 'text-xl' : ''}`}>
+                        {stat.value}
+                      </p>
+                    </div>
+                    <div className={`p-3 rounded-xl bg-muted ${stat.color}`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
 
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(3)].map((_, i) => (
-              <Skeleton key={i} className="h-[180px] rounded-2xl" />
-            ))}
-          </div>
-        ) : data && data.recentAgents.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {data.recentAgents.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} />
-            ))}
-          </div>
-        ) : (
-          /* Empty state */
-          <div className="text-center py-16 bg-card rounded-2xl border border-dashed border-border/60">
-            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-              <Bot className="h-8 w-8 text-muted-foreground" />
+        {/* API Key warning */}
+        {!session!.user.apiKeyValid && (
+          <div className="flex items-center justify-between rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-4">
+            <div className="flex items-center gap-3">
+              <Zap className="h-5 w-5 text-amber-500" />
+              <div>
+                <p className="text-sm font-medium">Set up your API key to start chatting</p>
+                <p className="text-xs text-muted-foreground">Add your Anthropic API key in settings</p>
+              </div>
             </div>
-            <h3 className="font-semibold">{t("noAgents")}</h3>
-            <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
-              Get started by visiting the store and creating your first agent.
-            </p>
-            <Button asChild variant="outline" className="mt-4 rounded-xl">
-              <Link href="/store">
-                <Plus className="h-4 w-4 mr-2" />
-                {t("createFirst") || "Create your first agent"}
-              </Link>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/settings">Configure</Link>
             </Button>
           </div>
         )}
-      </motion.div>
+
+        {/* Recent Agents */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold">{t('recentAgents')}</h3>
+            {totalAgents > 0 && (
+              <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+                <Link href="/agents">
+                  View all
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </Button>
+            )}
+          </div>
+
+          {recentAgents.length === 0 ? (
+            <EmptyState
+              emoji="🤖"
+              title={t('noAgents')}
+              description={t('createFirst')}
+              actionLabel={t('createAgent')}
+              onAction={() => {}}
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {recentAgents.map((agent) => (
+                <Card key={agent.id} className="border hover:border-primary/30 transition-all duration-200 group">
+                  <CardContent className="p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-3xl">{agent.emoji}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {agent._count.conversations} chats
+                      </span>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-sm">{agent.name}</h4>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                        {truncate(agent.personality, 80)}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button asChild size="sm" className="flex-1 h-8 text-xs">
+                        <Link href={`/agents/${agent.id}`}>
+                          {t('chatNow')}
+                        </Link>
+                      </Button>
+                      <Button asChild size="sm" variant="outline" className="h-8 w-8 p-0">
+                        <Link href={`/agents/${agent.id}/edit`}>
+                          <BarChart3 className="h-3 w-3" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
-  );
+  )
 }

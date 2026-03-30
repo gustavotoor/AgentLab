@@ -1,11 +1,20 @@
+import { PrismaClient } from '@prisma/client'
+
 /**
- * Prisma client singleton for Next.js.
- * Uses globalThis to prevent multiple instances during hot-reload in development.
+ * Global Prisma client singleton to prevent multiple instances during hot reloads in development.
+ * Uses a global variable to persist the client across module reloads.
  */
-import { PrismaClient } from "@prisma/client";
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined
+}
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+/** Shared Prisma client instance */
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  })
 
-export const db = globalForPrisma.prisma || new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma
+}

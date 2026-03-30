@@ -1,52 +1,74 @@
+import { withAuth } from 'next-auth/middleware'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
 /**
- * Next.js middleware for route protection.
- * Redirects unauthenticated users away from protected routes
- * and authenticated users away from auth pages.
+ * Middleware that protects (app) routes using NextAuth session checks.
+ * Handles:
+ * - Redirecting unauthenticated users to /login
+ * - Redirecting authenticated users away from auth pages
+ * - Preserving callbackUrl for post-login redirects
  */
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+export default withAuth(
+  function middleware(req: NextRequest) {
+    const token = (req as NextRequest & { nextauth?: { token: unknown } }).nextauth?.token
+    const { pathname } = req.nextUrl
 
-const publicRoutes = ["/", "/login", "/register", "/verify-email", "/forgot-password", "/reset-password"];
-const authRoutes = ["/login", "/register"];
+    // Auth pages: redirect authenticated users to dashboard
+    const authPages = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email']
+    if (authPages.some((p) => pathname.startsWith(p)) && token) {
+      return NextResponse.redirect(new URL('/dashboard', req.url))
+    }
 
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+    return NextResponse.next()
+  },
+  {
+    callbacks: {
+      /**
+       * Determines if a request is authorized.
+       * Returns true for public routes, requires token for protected routes.
+       */
+      authorized({ token, req }) {
+        const { pathname } = req.nextUrl
 
-  // Skip API routes, static files, and Next.js internals
-  if (
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
-    pathname.includes(".")
-  ) {
-    return NextResponse.next();
+        // Public routes - always allow
+        const publicRoutes = [
+          '/',
+          '/login',
+          '/register',
+          '/forgot-password',
+          '/reset-password',
+          '/verify-email',
+        ]
+
+        if (publicRoutes.some((route) => pathname === route || pathname.startsWith(route + '/'))) {
+          return true
+        }
+
+        // API auth routes - always allow
+        if (pathname.startsWith('/api/auth/')) {
+          return true
+        }
+
+        // Protected routes require a token
+        return !!token
+      },
+    },
+    pages: {
+      signIn: '/login',
+    },
   }
-
-  const sessionToken =
-    request.cookies.get("next-auth.session-token")?.value ||
-    request.cookies.get("__Secure-next-auth.session-token")?.value;
-
-  const isAuthenticated = !!sessionToken;
-  const isPublicRoute = publicRoutes.some(
-    (route) => pathname === route || pathname.startsWith(route + "?")
-  );
-  const isAuthRoute = authRoutes.includes(pathname);
-
-  // Redirect authenticated users away from login/register
-  if (isAuthenticated && isAuthRoute) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
-
-  // Redirect unauthenticated users to login
-  if (!isAuthenticated && !isPublicRoute) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  return NextResponse.next();
-}
+)
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
-};
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public files (images, etc.)
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+}

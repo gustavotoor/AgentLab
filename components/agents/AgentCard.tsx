@@ -1,139 +1,168 @@
-/**
- * Agent card component — displays an agent's info in a grid/list layout.
- * Shows emoji, name, template type, conversation count, and action buttons.
- */
-"use client";
+'use client'
 
-import Link from "next/link";
-import { motion } from "framer-motion";
-import { MessageSquare, Pencil, Copy, Trash2, Clock } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import { MessageSquare, Edit2, Copy, Trash2, MoreHorizontal } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
-import { useTranslations } from "next-intl";
+} from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { toast } from '@/hooks/use-toast'
+import { Toaster } from '@/components/ui/toaster'
+import { truncate } from '@/lib/utils'
+import type { Agent } from '@prisma/client'
 
 interface AgentCardProps {
-  agent: {
-    id: string;
-    name: string;
-    emoji: string;
-    templateId: string;
-    tone: string;
-    totalChats: number;
-    updatedAt: string;
-  };
-  onDuplicate?: (id: string) => void;
-  onDelete?: (id: string) => void;
-  className?: string;
+  agent: Agent & { _count: { conversations: number } }
 }
 
-export function AgentCard({ agent, onDuplicate, onDelete, className }: AgentCardProps) {
-  const t = useTranslations("agents");
+/**
+ * Agent card component with chat, edit, duplicate, and delete actions.
+ */
+export function AgentCard({ agent }: AgentCardProps) {
+  const t = useTranslations('agents')
+  const router = useRouter()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isDuplicating, setIsDuplicating] = useState(false)
 
-  const timeAgo = getRelativeTime(new Date(agent.updatedAt));
+  const handleDelete = async () => {
+    setIsDeleting(true)
+    try {
+      const res = await fetch(`/api/agents/${agent.id}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast({ title: t('agentDeleted'), variant: 'default' })
+        router.refresh()
+      } else {
+        toast({ title: 'Failed to delete agent', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' })
+    } finally {
+      setIsDeleting(false)
+      setDeleteDialogOpen(false)
+    }
+  }
+
+  const handleDuplicate = async () => {
+    setIsDuplicating(true)
+    try {
+      const res = await fetch(`/api/agents/${agent.id}/duplicate`, { method: 'POST' })
+      if (res.ok) {
+        toast({ title: t('agentDuplicated'), variant: 'default' })
+        router.refresh()
+      } else {
+        toast({ title: 'Failed to duplicate agent', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' })
+    } finally {
+      setIsDuplicating(false)
+    }
+  }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.2 }}
-      className={cn(
-        "group relative bg-card rounded-2xl border border-border/50 p-5 shadow-sm hover:shadow-md hover:border-border transition-all duration-200",
-        className
-      )}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-900/15 flex items-center justify-center text-2xl">
-            {agent.emoji}
-          </div>
-          <div>
-            <h3 className="font-semibold text-sm tracking-tight">{agent.name}</h3>
-            <p className="text-xs text-muted-foreground capitalize">{agent.templateId.replace(/-/g, " ")}</p>
-          </div>
-        </div>
+    <>
+      <Toaster />
+      <Card className="group border hover:border-primary/30 hover:shadow-md transition-all duration-200">
+        <CardContent className="p-5 space-y-4">
+          {/* Header */}
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{agent.emoji}</span>
+              <div>
+                <h3 className="font-semibold text-sm line-clamp-1">{agent.name}</h3>
+                <p className="text-xs text-muted-foreground">{agent._count.conversations} chats</p>
+              </div>
+            </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <span className="text-muted-foreground text-lg">⋯</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-xl">
-            <DropdownMenuItem asChild>
-              <Link href={`/agents/${agent.id}/edit`}>
-                <Pencil className="h-4 w-4 mr-2" />
-                {t("edit")}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link href={`/agents/${agent.id}/edit`}>
+                    <Edit2 className="mr-2 h-4 w-4" />
+                    {t('edit')}
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDuplicate} disabled={isDuplicating}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  {t('duplicate')}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {t('deleteAgent')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Personality preview */}
+          <p className="text-xs text-muted-foreground line-clamp-3">
+            {truncate(agent.personality, 100)}
+          </p>
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Button asChild size="sm" className="flex-1 h-8 text-xs">
+              <Link href={`/agents/${agent.id}`}>
+                <MessageSquare className="h-3 w-3" />
+                {t('startChat')}
               </Link>
-            </DropdownMenuItem>
-            {onDuplicate && (
-              <DropdownMenuItem onClick={() => onDuplicate(agent.id)}>
-                <Copy className="h-4 w-4 mr-2" />
-                {t("duplicate")}
-              </DropdownMenuItem>
-            )}
-            {onDelete && (
-              <DropdownMenuItem
-                onClick={() => onDelete(agent.id)}
-                className="text-red-600 focus:text-red-600"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                {t("delete")}
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+            </Button>
+            <Button asChild size="sm" variant="outline" className="h-8 w-8 p-0">
+              <Link href={`/agents/${agent.id}/edit`}>
+                <Edit2 className="h-3 w-3" />
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Stats */}
-      <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <MessageSquare className="h-3.5 w-3.5" />
-          <span>{agent.totalChats} {t("conversations").toLowerCase()}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Clock className="h-3.5 w-3.5" />
-          <span>{timeAgo}</span>
-        </div>
-      </div>
-
-      {/* Chat button */}
-      <Link href={`/agents/${agent.id}`}>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full mt-4 rounded-xl text-xs hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:text-amber-700 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-900/50 transition-colors"
-        >
-          <MessageSquare className="h-3.5 w-3.5 mr-2" />
-          {t("chat")}
-        </Button>
-      </Link>
-    </motion.div>
-  );
-}
-
-/** Returns a human-readable relative time string from a Date */
-function getRelativeTime(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('deleteAgent')}</DialogTitle>
+            <DialogDescription>{t('deleteConfirm')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? 'Deleting...' : t('delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
 }

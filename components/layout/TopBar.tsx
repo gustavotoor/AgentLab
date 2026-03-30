@@ -1,91 +1,92 @@
-/**
- * Top bar with page title, theme toggle, and language switcher.
- * Sits above the main content area in the authenticated layout.
- */
-"use client";
+'use client'
 
-import { useTheme } from "next-themes";
-import { useTransition } from "react";
-import { Sun, Moon, Monitor, Globe } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useTheme } from 'next-themes'
+import { Moon, Sun, Monitor, Globe } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useTranslations } from "next-intl";
-import { setUserLocale } from "@/i18n/locale";
+} from '@/components/ui/dropdown-menu'
+import { useLocale } from '@/hooks/use-locale'
+import { localeNames, localeFlags, type Locale } from '@/i18n/config'
 
 interface TopBarProps {
-  title?: string;
+  /** Page title to display */
+  title?: string
+  /** Additional actions to render on the right side */
+  actions?: React.ReactNode
 }
 
-export function TopBar({ title }: TopBarProps) {
-  const t = useTranslations("settings");
-  const { theme, setTheme } = useTheme();
-  const [, startTransition] = useTransition();
-
-  /** Switch app locale and persist to cookie */
-  function handleLocaleChange(locale: string) {
-    startTransition(async () => {
-      await setUserLocale(locale);
-      window.location.reload();
-    });
-  }
+/**
+ * Application top bar with theme toggle and locale switcher.
+ */
+export function TopBar({ title, actions }: TopBarProps) {
+  const { setTheme, resolvedTheme } = useTheme()
+  const { locale, switchLocale, locales } = useLocale()
 
   return (
-    <header className="h-14 border-b border-border/40 bg-background/80 backdrop-blur-md flex items-center justify-between px-6 sticky top-0 z-30">
-      <div className="flex items-center gap-4">
-        {/* Spacer for mobile menu button */}
-        <div className="lg:hidden w-10" />
-        {title && (
-          <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
-        )}
+    <header className="flex h-14 items-center justify-between border-b px-6 bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+      <div className="flex items-center gap-3">
+        {title && <h1 className="text-base font-semibold text-foreground">{title}</h1>}
       </div>
 
-      <div className="flex items-center gap-1.5">
-        {/* Language switcher */}
+      <div className="flex items-center gap-2">
+        {actions}
+
+        {/* Locale switcher */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
+            <Button variant="ghost" size="icon" className="h-9 w-9">
               <Globe className="h-4 w-4" />
+              <span className="sr-only">Switch language</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-xl">
-            <DropdownMenuItem onClick={() => handleLocaleChange("pt-BR")}>
-              🇧🇷 Português
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleLocaleChange("en")}>
-              🇺🇸 English
-            </DropdownMenuItem>
+          <DropdownMenuContent align="end">
+            {locales.map((loc) => (
+              <DropdownMenuItem
+                key={loc}
+                onClick={() => switchLocale(loc as Locale)}
+                className={locale === loc ? 'font-medium text-primary' : ''}
+              >
+                <span className="mr-2">{localeFlags[loc as Locale]}</span>
+                {localeNames[loc as Locale]}
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
         {/* Theme toggle */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
-              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <Button variant="ghost" size="icon" className="h-9 w-9">
+              {resolvedTheme === 'dark' ? (
+                <Moon className="h-4 w-4" />
+              ) : (
+                <Sun className="h-4 w-4" />
+              )}
+              <span className="sr-only">Toggle theme</span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-xl">
-            <DropdownMenuItem onClick={() => setTheme("light")}>
-              <Sun className="h-4 w-4 mr-2" />
-              {t("themeLight")}
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setTheme('light')}>
+              <Sun className="mr-2 h-4 w-4" />
+              Light
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("dark")}>
-              <Moon className="h-4 w-4 mr-2" />
-              {t("themeDark")}
+            <DropdownMenuItem onClick={() => setTheme('dark')}>
+              <Moon className="mr-2 h-4 w-4" />
+              Dark
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("system")}>
-              <Monitor className="h-4 w-4 mr-2" />
-              {t("themeSystem")}
+            <DropdownMenuItem onClick={() => setTheme('system')}>
+              <Monitor className="mr-2 h-4 w-4" />
+              System
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </header>
-  );
+  )
 }
+
+export { TopBar as default }

@@ -8,52 +8,22 @@ datasource db {
 }
 
 model User {
-  id                String              @id @default(cuid())
-  email             String              @unique
-  name              String?
-  password          String?
-  image             String?
-  emailVerified     DateTime?
-  apiKeyEncrypted   String?
-  apiKeyMasked      String?
-  apiKeyValid       Boolean             @default(false)
-  onboardingDone    Boolean             @default(false)
-  locale            String              @default("pt-BR")
-  theme             String              @default("light")
-  createdAt         DateTime            @default(now())
-  agents            Agent[]
-  sessions          Session[]
+  id               String              @id @default(cuid())
+  email            String              @unique
+  name             String?
+  password         String?
+  image            String?
+  emailVerified    DateTime?
+  apiKeyEncrypted  String?
+  apiKeyMasked     String?
+  apiKeyValid      Boolean             @default(false)
+  onboardingDone   Boolean             @default(false)
+  locale           String              @default("pt-BR")
+  theme            String              @default("light")
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  agents           Agent[]
   verificationTokens VerificationToken[]
-
-  @@map("users")
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("sessions")
-}
-
-model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-
-  @@unique([provider, providerAccountId])
-  @@map("accounts")
 }
 
 model VerificationToken {
@@ -65,8 +35,6 @@ model VerificationToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
-
-  @@map("verification_tokens")
 }
 
 model Agent {
@@ -85,8 +53,6 @@ model Agent {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   conversations Conversation[]
-
-  @@map("agents")
 }
 
 model Conversation {
@@ -95,10 +61,7 @@ model Conversation {
   agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
   title     String?
   createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
   messages  Message[]
-
-  @@map("conversations")
 }
 
 model Message {
@@ -108,6 +71,4 @@ model Message {
   role           String
   content        String
   createdAt      DateTime     @default(now())
-
-  @@map("messages")
 }

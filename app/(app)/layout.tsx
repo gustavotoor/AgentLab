@@ -1,22 +1,32 @@
-/**
- * Authenticated app layout — wraps all protected pages with sidebar and topbar.
- * Redirects unauthenticated users and users who haven't completed onboarding.
- */
-import { Sidebar } from "@/components/layout/Sidebar";
-import { TopBar } from "@/components/layout/TopBar";
+import { redirect } from 'next/navigation'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { Sidebar } from '@/components/layout/Sidebar'
+import { Toaster } from '@/components/ui/toaster'
 
-export default function AppLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+/**
+ * Authenticated app shell layout.
+ * Checks session and redirects to login if unauthenticated.
+ * Redirects to onboarding if user hasn't completed it.
+ */
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const session = await getServerSession(authOptions)
+
+  if (!session) {
+    redirect('/login')
+  }
+
+  if (!session.user.onboardingDone) {
+    redirect('/onboarding')
+  }
+
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <TopBar />
-        <main className="flex-1 p-6">{children}</main>
-      </div>
+      <main className="flex flex-1 flex-col overflow-hidden">
+        {children}
+      </main>
+      <Toaster />
     </div>
-  );
+  )
 }

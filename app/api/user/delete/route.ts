@@ -1,36 +1,24 @@
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+
 /**
- * DELETE /api/user/delete — Permanently delete user account and all data.
- * Requires confirmation text "DELETE" in the request body.
+ * DELETE /api/user/delete
+ * Permanently deletes the current user's account and all associated data.
  */
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
-
-export async function DELETE(req: Request) {
+export async function DELETE() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { confirmation } = await req.json();
-
-    if (confirmation !== "DELETE") {
-      return NextResponse.json(
-        { error: "confirmation-required" },
-        { status: 400 }
-      );
-    }
-
-    // Delete user (cascade will handle agents, conversations, messages)
-    await db.user.delete({
+    await prisma.user.delete({
       where: { id: session.user.id },
-    });
+    })
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ message: 'Account deleted successfully' })
   } catch (error) {
-    console.error("[USER_DELETE_ERROR]", error);
-    return NextResponse.json({ error: "internal-error" }, { status: 500 });
+    console.error('Delete account error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

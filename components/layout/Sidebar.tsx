@@ -1,223 +1,145 @@
-/**
- * Collapsible sidebar navigation for the authenticated app layout.
- * Shows: Dashboard, Store, My Agents, Settings + user avatar at bottom.
- * Collapses to icon-only on desktop, slides as sheet on mobile.
- */
-"use client";
+'use client'
 
-import { useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
-import { motion, AnimatePresence } from "framer-motion";
+import { usePathname, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useTranslations } from 'next-intl'
+import { useSession, signOut } from 'next-auth/react'
+import { motion } from 'framer-motion'
 import {
   LayoutDashboard,
-  Store,
   Bot,
+  Store,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   LogOut,
-  Sparkles,
-  Menu,
-} from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
-import { useTranslations } from "next-intl";
+  Plus,
+  Zap,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { getInitials } from '@/lib/utils'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { Button } from '@/components/ui/button'
 
-const navItems = [
-  { href: "/dashboard", icon: LayoutDashboard, labelKey: "dashboard" },
-  { href: "/store", icon: Store, labelKey: "store" },
-  { href: "/agents", icon: Bot, labelKey: "myAgents" },
-  { href: "/settings", icon: Settings, labelKey: "settings" },
-] as const;
-
-/** Returns initials from a user name for the avatar fallback */
-function getInitials(name?: string | null): string {
-  if (!name) return "U";
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+interface NavItem {
+  href: string
+  labelKey: string
+  icon: React.ElementType
 }
 
+const navItems: NavItem[] = [
+  { href: '/dashboard', labelKey: 'dashboard', icon: LayoutDashboard },
+  { href: '/agents', labelKey: 'agents', icon: Bot },
+  { href: '/store', labelKey: 'store', icon: Store },
+  { href: '/settings', labelKey: 'settings', icon: Settings },
+]
+
+/**
+ * App sidebar navigation component with icon labels and user info.
+ */
 export function Sidebar() {
-  const t = useTranslations("nav");
-  const pathname = usePathname();
-  const { data: session } = useSession();
-  const [collapsed, setCollapsed] = useState(false);
+  const t = useTranslations('nav')
+  const pathname = usePathname()
+  const { data: session } = useSession()
+  const router = useRouter()
 
-  const sidebarContent = (
-    <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-amber-500/15">
-          <Sparkles className="w-4 h-4 text-white" />
-        </div>
-        <AnimatePresence>
-          {!collapsed && (
-            <motion.span
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: "auto" }}
-              exit={{ opacity: 0, width: 0 }}
-              className="font-semibold text-lg tracking-tight overflow-hidden whitespace-nowrap"
-            >
-              AgentLab
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </div>
-
-      <Separator className="mx-3 w-auto" />
-
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map(({ href, icon: Icon, labelKey }) => {
-          const isActive = pathname === href || pathname.startsWith(href + "/");
-
-          const link = (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
-                isActive
-                  ? "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              )}
-            >
-              <Icon
-                className={cn(
-                  "h-[18px] w-[18px] flex-shrink-0",
-                  isActive && "text-amber-600 dark:text-amber-400"
-                )}
-              />
-              <AnimatePresence>
-                {!collapsed && (
-                  <motion.span
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: "auto" }}
-                    exit={{ opacity: 0, width: 0 }}
-                    className="overflow-hidden whitespace-nowrap"
-                  >
-                    {t(labelKey)}
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </Link>
-          );
-
-          if (collapsed) {
-            return (
-              <Tooltip key={href}>
-                <TooltipTrigger asChild>{link}</TooltipTrigger>
-                <TooltipContent side="right" className="font-medium">
-                  {t(labelKey)}
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-
-          return link;
-        })}
-      </nav>
-
-      {/* User section at bottom */}
-      <div className="p-3 mt-auto">
-        <Separator className="mb-3" />
-        <div className="flex items-center gap-3 px-2">
-          <Avatar className="h-8 w-8 flex-shrink-0">
-            <AvatarImage src={session?.user?.image ?? undefined} />
-            <AvatarFallback className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium">
-              {getInitials(session?.user?.name)}
-            </AvatarFallback>
-          </Avatar>
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.div
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                className="flex-1 overflow-hidden min-w-0"
-              >
-                <p className="text-sm font-medium truncate">
-                  {session?.user?.name ?? "User"}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {session?.user?.email}
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          {!collapsed && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => signOut({ callbackUrl: "/login" })}
-                >
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Logout</TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-      </div>
-
-      {/* Collapse toggle (desktop only) */}
-      <div className="hidden lg:block px-3 pb-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setCollapsed(!collapsed)}
-          className="w-full justify-center text-muted-foreground hover:text-foreground"
-        >
-          {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <>
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              <span className="text-xs">Collapse</span>
-            </>
-          )}
-        </Button>
-      </div>
-    </div>
-  );
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: '/login' })
+  }
 
   return (
-    <>
-      {/* Desktop sidebar */}
-      <motion.aside
-        animate={{ width: collapsed ? 72 : 260 }}
-        transition={{ duration: 0.2, ease: "easeInOut" }}
-        className="hidden lg:flex flex-col border-r border-border/50 bg-card/50 backdrop-blur-sm h-screen sticky top-0"
-      >
-        {sidebarContent}
-      </motion.aside>
+    <TooltipProvider delayDuration={300}>
+      <aside className="flex h-full w-16 flex-col items-center border-r bg-sidebar border-sidebar-border py-4">
+        {/* Logo */}
+        <Link href="/dashboard" className="mb-8 flex items-center justify-center">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/20">
+            <Zap className="h-5 w-5 text-primary-foreground" />
+          </div>
+        </Link>
 
-      {/* Mobile sidebar (sheet) */}
-      <div className="lg:hidden fixed top-0 left-0 z-40 p-3">
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button variant="outline" size="icon" className="rounded-xl shadow-md">
-              <Menu className="h-4 w-4" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-[280px] p-0">
-            {sidebarContent}
-          </SheetContent>
-        </Sheet>
-      </div>
-    </>
-  );
+        {/* Navigation */}
+        <nav className="flex flex-1 flex-col gap-1">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const isActive = pathname.startsWith(item.href)
+            return (
+              <Tooltip key={item.href}>
+                <TooltipTrigger asChild>
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      'relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200',
+                      isActive
+                        ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                        : 'text-sidebar-foreground hover:bg-sidebar-border hover:text-white'
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                    {isActive && (
+                      <motion.div
+                        layoutId="sidebar-active"
+                        className="absolute inset-0 rounded-xl bg-primary"
+                        style={{ zIndex: -1 }}
+                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>{t(item.labelKey as 'dashboard' | 'agents' | 'store' | 'settings')}</p>
+                </TooltipContent>
+              </Tooltip>
+            )
+          })}
+
+          {/* New Agent button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="mt-2 h-10 w-10 rounded-xl border border-dashed border-sidebar-border text-sidebar-foreground hover:border-primary hover:bg-primary/10 hover:text-primary"
+                onClick={() => router.push('/agents/new')}
+              >
+                <Plus className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>{t('newAgent')}</p>
+            </TooltipContent>
+          </Tooltip>
+        </nav>
+
+        {/* User avatar + logout */}
+        <div className="flex flex-col items-center gap-3 mt-4">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleSignOut}
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-sidebar-foreground hover:bg-sidebar-border transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>Sign out</p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Link href="/settings">
+            <Avatar className="h-9 w-9 ring-2 ring-sidebar-border hover:ring-primary transition-all">
+              <AvatarImage src={session?.user?.image ?? ''} />
+              <AvatarFallback className="bg-primary/20 text-primary text-xs font-semibold">
+                {getInitials(session?.user?.name ?? session?.user?.email ?? '?')}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
+        </div>
+      </aside>
+    </TooltipProvider>
+  )
 }

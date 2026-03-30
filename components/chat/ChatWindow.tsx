@@ -1,314 +1,274 @@
-/**
- * ChatWindow -- main chat container that manages messages, streaming, and scroll.
- *
- * - Uses Vercel AI SDK `useChat` for real-time streaming from /api/chat.
- * - Renders agent info header (emoji, name, template type).
- * - Auto-scrolls to the latest message.
- * - "New Conversation" button in the header.
- * - Passes agentId and conversationId in the request body.
- */
-"use client";
+'use client'
 
-import { useEffect, useRef, useCallback, useState } from "react";
-import { useChat } from "ai/react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Bot,
-  RotateCcw,
-  Sparkles,
-  PanelLeft,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
-import { useTranslations } from "next-intl";
-import { MessageBubble } from "./MessageBubble";
-import { ChatInput } from "./ChatInput";
-
-/* ------------------------------------------------------------------ */
-/*  Types                                                              */
-/* ------------------------------------------------------------------ */
-
-interface AgentData {
-  id: string;
-  name: string;
-  emoji: string;
-  templateId: string;
-  tone: string;
-}
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
+import { AnimatePresence } from 'framer-motion'
+import { Send, Loader2, AlertCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { MessageBubble } from './MessageBubble'
+import type { Agent, Message } from '@prisma/client'
 
 interface ChatWindowProps {
-  /** Agent data to display and chat with */
-  agent: AgentData;
-  /** Current conversation id (null = start new) */
-  conversationId: string | null;
-  /** Called when a new conversation is created server-side */
-  onConversationCreated?: (id: string) => void;
-  /** Called when the user clicks "New Conversation" */
-  onNewConversation: () => void;
-  /** Toggle the conversation sidebar (mobile) */
-  onToggleSidebar?: () => void;
-  /** Whether the sidebar is currently open */
-  sidebarOpen?: boolean;
+  agent: Agent
+  conversationId?: string
+  initialMessages?: Message[]
+  apiKeyValid: boolean
+  onConversationCreated?: (id: string) => void
 }
 
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
+interface StreamMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: Date
+}
 
+/**
+ * Main chat window component with streaming message support.
+ * Handles sending messages, streaming AI responses, and conversation state.
+ */
 export function ChatWindow({
   agent,
-  conversationId,
+  conversationId: initialConversationId,
+  initialMessages = [],
+  apiKeyValid,
   onConversationCreated,
-  onNewConversation,
-  onToggleSidebar,
-  sidebarOpen,
 }: ChatWindowProps) {
-  const t = useTranslations("chat");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [hasScrolledUp, setHasScrolledUp] = useState(false);
+  const t = useTranslations('chat')
+  const [messages, setMessages] = useState<StreamMessage[]>(
+    initialMessages.map((m) => ({
+      id: m.id,
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+      createdAt: m.createdAt,
+    }))
+  )
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [streamingContent, setStreamingContent] = useState('')
+  const [conversationId, setConversationId] = useState(initialConversationId)
+  const [error, setError] = useState('')
 
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-    setMessages,
-  } = useChat({
-    api: "/api/chat",
-    body: {
-      agentId: agent.id,
-      conversationId,
-    },
-    onFinish: (message) => {
-      /* If the server returns a conversationId header, propagate it */
-      // The API should return the conversationId; handled via response metadata
-    },
-    onResponse: (response) => {
-      const newConvId = response.headers.get("x-conversation-id");
-      if (newConvId && newConvId !== conversationId) {
-        onConversationCreated?.(newConvId);
-      }
-    },
-  });
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  /** Reset messages when conversation changes */
-  useEffect(() => {
-    if (!conversationId) {
-      setMessages([]);
-      return;
-    }
-
-    /** Fetch existing messages for the selected conversation */
-    async function loadMessages() {
-      try {
-        const res = await fetch(`/api/conversations/${agent.id}/${conversationId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setMessages(
-            data.messages?.map((m: { id: string; role: string; content: string; createdAt: string }) => ({
-              id: m.id,
-              role: m.role as "user" | "assistant",
-              content: m.content,
-              createdAt: new Date(m.createdAt),
-            })) ?? []
-          );
-        }
-      } catch {
-        /* fail silently */
-      }
-    }
-
-    loadMessages();
-  }, [conversationId, agent.id, setMessages]);
-
-  /** Auto-scroll to bottom on new messages */
-  useEffect(() => {
-    if (!hasScrolledUp) {
-      scrollRef.current?.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: "smooth",
-      });
-    }
-  }, [messages, hasScrolledUp]);
-
-  /** Detect if user has scrolled up */
-  const handleScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    setHasScrolledUp(!atBottom);
-  }, []);
-
-  /** Scroll-to-bottom handler */
   const scrollToBottom = useCallback(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-    setHasScrolledUp(false);
-  }, []);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
 
-  /** Submit wrapper that invokes the useChat handler */
-  const handleSend = useCallback(() => {
-    if (!input.trim()) return;
-    handleSubmit();
-  }, [input, handleSubmit]);
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, streamingContent, scrollToBottom])
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (!input.trim() || isLoading || !apiKeyValid) return
+
+    const userMessage = input.trim()
+    setInput('')
+    setError('')
+    setIsLoading(true)
+
+    // Add user message immediately
+    const tempUserMsg: StreamMessage = {
+      id: `temp-${Date.now()}`,
+      role: 'user',
+      content: userMessage,
+      createdAt: new Date(),
+    }
+    setMessages((prev) => [...prev, tempUserMsg])
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: agent.id,
+          conversationId,
+          message: userMessage,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error ?? 'Failed to send message')
+      }
+
+      // Get conversation ID from header
+      const newConvoId = res.headers.get('X-Conversation-Id')
+      if (newConvoId && !conversationId) {
+        setConversationId(newConvoId)
+        onConversationCreated?.(newConvoId)
+      }
+
+      // Stream the response
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('No response body')
+
+      const decoder = new TextDecoder()
+      let fullContent = ''
+      setStreamingContent('')
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('0:')) {
+            try {
+              const text = JSON.parse(line.slice(2))
+              fullContent += text
+              setStreamingContent(fullContent)
+            } catch {
+              // Skip malformed chunks
+            }
+          }
+        }
+      }
+
+      // Add assistant message
+      if (fullContent) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            content: fullContent,
+            createdAt: new Date(),
+          },
+        ])
+      }
+      setStreamingContent('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+      // Remove the temp user message on error
+      setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id))
+    } finally {
+      setIsLoading(false)
+      setStreamingContent('')
+      textareaRef.current?.focus()
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      void handleSubmit()
+    }
+  }
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
-      <motion.header
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-        className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border/40 bg-background/80 backdrop-blur-md flex-shrink-0"
-      >
-        <div className="flex items-center gap-3">
-          {/* Mobile sidebar toggle */}
-          {onToggleSidebar && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggleSidebar}
-              className="h-8 w-8 rounded-lg lg:hidden"
-            >
-              <PanelLeft className="h-4 w-4" />
-            </Button>
-          )}
-
-          {/* Agent info */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/15 flex items-center justify-center text-xl shadow-sm">
-              {agent.emoji}
-            </div>
+    <div className="flex flex-col h-full">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
+        {messages.length === 0 && !isLoading && (
+          <div className="flex flex-col items-center justify-center h-full text-center py-16 space-y-3">
+            <span className="text-5xl">{agent.emoji}</span>
             <div>
-              <h2 className="text-sm font-semibold tracking-tight leading-tight">
-                {agent.name}
-              </h2>
-              <p className="text-[11px] text-muted-foreground capitalize">
-                {agent.templateId.replace(/-/g, " ")}
+              <h3 className="font-semibold">{agent.name}</h3>
+              <p className="text-sm text-muted-foreground max-w-xs mt-1">
+                {t('startFirst')}
               </p>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* New conversation */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onNewConversation}
-          className="rounded-xl text-xs hover:bg-amber-50 dark:hover:bg-amber-950/20 hover:text-amber-700 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-900/50 transition-colors"
-        >
-          <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-          {t("newConversation")}
-        </Button>
-      </motion.header>
+        <AnimatePresence initial={false}>
+          {messages.map((message) => (
+            <MessageBubble key={message.id} message={message} agentEmoji={agent.emoji} />
+          ))}
+        </AnimatePresence>
 
-      {/* Messages area */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-4 scroll-smooth scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent"
-      >
-        {messages.length === 0 ? (
-          /* Empty state */
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.15, duration: 0.3 }}
-            className="flex flex-col items-center justify-center h-full text-center px-4"
-          >
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/20 flex items-center justify-center mb-4 shadow-sm">
-              <span className="text-3xl">{agent.emoji}</span>
-            </div>
-            <h3 className="font-semibold tracking-tight text-lg">{agent.name}</h3>
-            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-              {t("emptyState")}
-            </p>
+        {/* Streaming message */}
+        {streamingContent && (
+          <MessageBubble
+            message={{
+              id: 'streaming',
+              role: 'assistant',
+              content: streamingContent,
+              createdAt: new Date(),
+            }}
+            agentEmoji={agent.emoji}
+            isStreaming
+          />
+        )}
 
-            {/* Suggested starters */}
-            <div className="flex flex-wrap justify-center gap-2 mt-6">
-              {[t("starter1"), t("starter2"), t("starter3")].map((starter, i) => (
-                <motion.button
+        {/* Thinking indicator */}
+        {isLoading && !streamingContent && (
+          <div className="flex items-center gap-3 py-2 px-4">
+            <span className="text-xl">{agent.emoji}</span>
+            <div className="flex gap-1">
+              {[0, 1, 2].map((i) => (
+                <div
                   key={i}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.25 + i * 0.08 }}
-                  onClick={() => {
-                    handleInputChange({ target: { value: starter } } as React.ChangeEvent<HTMLTextAreaElement>);
-                  }}
-                  className="px-4 py-2 rounded-2xl border border-border/50 bg-card text-xs text-muted-foreground hover:text-foreground hover:border-amber-300 dark:hover:border-amber-800 hover:bg-amber-50/50 dark:hover:bg-amber-950/20 transition-all duration-150"
-                >
-                  <Sparkles className="h-3 w-3 inline mr-1.5 text-amber-500" />
-                  {starter}
-                </motion.button>
-              ))}
-            </div>
-          </motion.div>
-        ) : (
-          /* Message list */
-          <div className="flex flex-col space-y-3 max-w-3xl mx-auto w-full">
-            <AnimatePresence initial={false}>
-              {messages.map((message, idx) => (
-                <MessageBubble
-                  key={message.id}
-                  role={message.role as "user" | "assistant"}
-                  content={message.content}
-                  createdAt={message.createdAt?.toISOString?.() ?? new Date().toISOString()}
-                  isStreaming={isLoading && idx === messages.length - 1 && message.role === "assistant"}
+                  className="h-2 w-2 rounded-full bg-muted-foreground/50 animate-bounce"
+                  style={{ animationDelay: `${i * 0.15}s` }}
                 />
               ))}
-            </AnimatePresence>
-
-            {/* Loading indicator while waiting for first token */}
-            {isLoading && messages[messages.length - 1]?.role === "user" && (
-              <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="self-start flex items-center gap-2 px-4 py-3 rounded-2xl bg-muted/60 dark:bg-muted/40 border border-border/40"
-              >
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce [animation-delay:0ms]" />
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-bounce [animation-delay:150ms]" />
-                  <span className="w-2 h-2 rounded-full bg-orange-500 animate-bounce [animation-delay:300ms]" />
-                </div>
-                <span className="text-xs text-muted-foreground ml-1">{t("thinking")}</span>
-              </motion.div>
-            )}
+            </div>
           </div>
         )}
+
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Scroll-to-bottom FAB */}
-      <AnimatePresence>
-        {hasScrolledUp && messages.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10"
-          >
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={scrollToBottom}
-              className="rounded-full shadow-md text-xs bg-background/90 backdrop-blur-sm"
-            >
-              {t("scrollToBottom")}
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Error */}
+      {error && (
+        <div className="mx-4 mb-2 flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
 
-      {/* Input */}
-      <ChatInput
-        value={input}
-        onChange={handleInputChange}
-        onSubmit={handleSend}
-        isLoading={isLoading}
-      />
+      {/* Input area */}
+      <div className="border-t p-4">
+        {!apiKeyValid ? (
+          <div className="text-center py-4 space-y-3">
+            <p className="text-sm text-muted-foreground">{t('noApiKey')}</p>
+            <Button asChild size="sm" variant="outline">
+              <a href="/settings">{t('goToSettings')}</a>
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex gap-3 items-end">
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={t('messagePlaceholder')}
+              rows={1}
+              className="min-h-[44px] max-h-[200px] resize-none flex-1"
+              disabled={isLoading}
+              style={{ height: 'auto' }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement
+                target.style.height = 'auto'
+                target.style.height = `${Math.min(target.scrollHeight, 200)}px`
+              }}
+            />
+            <Button
+              type="submit"
+              size="icon"
+              disabled={isLoading || !input.trim()}
+              className="h-11 w-11 shrink-0"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </form>
+        )}
+        <p className="text-xs text-muted-foreground mt-2 text-center">
+          Enter to send · Shift+Enter for new line
+        </p>
+      </div>
     </div>
-  );
+  )
 }

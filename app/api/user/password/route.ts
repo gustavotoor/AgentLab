@@ -1,55 +1,55 @@
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import bcrypt from 'bcryptjs'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+import { changePasswordSchema } from '@/lib/validations'
+
 /**
- * PATCH /api/user/password — Change password for authenticated user.
- * Validates current password before allowing the update.
+ * POST /api/user/password
+ * Changes the current user's password after verifying their current password.
  */
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { compare, hash } from "bcryptjs";
-import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { changePasswordSchema } from "@/lib/validations";
-
-export async function PATCH(req: Request) {
+export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await req.json();
-    const parsed = changePasswordSchema.safeParse(body);
+    const body = await req.json()
+    const parsed = changePasswordSchema.safeParse(body)
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "validation-error", details: parsed.error.flatten().fieldErrors },
+        { error: 'Validation failed', details: parsed.error.flatten().fieldErrors },
         { status: 400 }
-      );
+      )
     }
 
-    const user = await db.user.findUnique({
+    const { currentPassword, newPassword } = parsed.data
+
+    const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { password: true },
-    });
+    })
 
     if (!user?.password) {
-      return NextResponse.json({ error: "no-password-set" }, { status: 400 });
+      return NextResponse.json({ error: 'No password set for this account' }, { status: 400 })
     }
 
-    const isValid = await compare(parsed.data.currentPassword, user.password);
+    const isValid = await bcrypt.compare(currentPassword, user.password)
     if (!isValid) {
-      return NextResponse.json({ error: "wrong-current-password" }, { status: 400 });
+      return NextResponse.json({ error: 'Current password is incorrect' }, { status: 400 })
     }
 
-    const hashedPassword = await hash(parsed.data.newPassword, 12);
+    const hashedPassword = await bcrypt.hash(newPassword, 12)
 
-    await db.user.update({
+    await prisma.user.update({
       where: { id: session.user.id },
       data: { password: hashedPassword },
-    });
+    })
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ message: 'Password changed successfully' })
   } catch (error) {
-    console.error("[PASSWORD_PATCH_ERROR]", error);
-    return NextResponse.json({ error: "internal-error" }, { status: 500 });
+    console.error('Change password error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
