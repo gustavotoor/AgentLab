@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { Zap, Key, Layers, Palette, History, Shield, Globe, ArrowRight, Bot, ChevronRight } from 'lucide-react'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { Zap, Key, Layers, Palette, History, Shield, Globe, ArrowRight, Bot, ChevronRight, LayoutDashboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const FEATURES = [
@@ -26,6 +28,8 @@ const AGENT_PREVIEWS = [
  */
 export default async function LandingPage() {
   const t = await getTranslations('landing')
+  const session = await getServerSession(authOptions)
+  const isLoggedIn = !!session
 
   return (
     <div className="min-h-screen bg-[#060912]">
@@ -38,15 +42,26 @@ export default async function LandingPage() {
           <span className="font-bold text-white text-lg">AgentLab</span>
         </Link>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" asChild className="text-white/70 hover:text-white hover:bg-white/5">
-            <Link href="/login">Sign in</Link>
-          </Button>
-          <Button asChild className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20">
-            <Link href="/register">
-              Get started
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          {isLoggedIn ? (
+            <Button asChild className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20">
+              <Link href="/dashboard">
+                <LayoutDashboard className="h-4 w-4" />
+                Go to Dashboard
+              </Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" asChild className="text-white/70 hover:text-white hover:bg-white/5">
+                <Link href="/login">Sign in</Link>
+              </Button>
+              <Button asChild className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20">
+                <Link href="/register">
+                  Get started
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -84,16 +99,29 @@ export default async function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button
-              asChild
-              size="lg"
-              className="bg-blue-600 hover:bg-blue-500 text-white h-12 px-8 shadow-xl shadow-blue-600/20 text-base"
-            >
-              <Link href="/register">
-                {t('hero.cta')}
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            {isLoggedIn ? (
+              <Button
+                asChild
+                size="lg"
+                className="bg-blue-600 hover:bg-blue-500 text-white h-12 px-8 shadow-xl shadow-blue-600/20 text-base"
+              >
+                <Link href="/dashboard">
+                  <LayoutDashboard className="h-4 w-4" />
+                  Go to Dashboard
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                asChild
+                size="lg"
+                className="bg-blue-600 hover:bg-blue-500 text-white h-12 px-8 shadow-xl shadow-blue-600/20 text-base"
+              >
+                <Link href="/register">
+                  {t('hero.cta')}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
             <Button
               asChild
               variant="outline"

@@ -20,10 +20,17 @@ interface ConversationSidebarProps {
   onSelectConversation: (id: string) => void
 }
 
-/**
- * Sidebar listing all conversations for an agent.
- * Handles creation, selection, and deletion of conversations.
- */
+function formatConvoDate(date: Date | string): string {
+  const d = new Date(date)
+  const now = new Date()
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86_400_000)
+
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return d.toLocaleDateString([], { weekday: 'short' })
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
 export function ConversationSidebar({
   agentId,
   conversations: initialConversations,
@@ -37,14 +44,10 @@ export function ConversationSidebar({
   const handleDelete = async (e: React.MouseEvent, conversationId: string) => {
     e.stopPropagation()
     try {
-      const res = await fetch(`/api/conversations/${agentId}/${conversationId}`, {
-        method: 'DELETE',
-      })
+      const res = await fetch(`/api/conversations/${agentId}/${conversationId}`, { method: 'DELETE' })
       if (res.ok) {
         setConversations((prev) => prev.filter((c) => c.id !== conversationId))
-        if (currentConversationId === conversationId) {
-          onNewConversation()
-        }
+        if (currentConversationId === conversationId) onNewConversation()
       }
     } catch {
       // Silent fail
@@ -91,13 +94,13 @@ export function ConversationSidebar({
                       {truncate(lastMessage.content, 50)}
                     </p>
                   )}
-                  <p className="text-xs text-muted-foreground/50 mt-1">
-                    {convo._count.messages} messages
+                  <p className="text-[10px] text-muted-foreground/50 mt-1">
+                    {formatConvoDate(convo.createdAt)}
                   </p>
                 </div>
                 <button
                   onClick={(e) => handleDelete(e, convo.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all"
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all shrink-0"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>

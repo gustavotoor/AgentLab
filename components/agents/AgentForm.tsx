@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { motion } from 'framer-motion'
-import { Loader2, Save } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Loader2, Save, ArrowRight, ArrowLeft, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,31 +18,43 @@ import {
 } from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
 import { Toaster } from '@/components/ui/toaster'
-import { AGENT_TEMPLATES, AGENT_TONES } from '@/lib/prompts'
+import { AGENT_TEMPLATES, AGENT_TONES, buildSystemPrompt } from '@/lib/prompts'
+import { cn } from '@/lib/utils'
 import type { Agent } from '@prisma/client'
 
 const EMOJI_OPTIONS = ['🤖', '🦾', '🧠', '⚡', '🎯', '🚀', '💡', '🔮', '🦁', '🐺', '🦊', '🐉', '👾', '🎭', '🌟', '💎']
+
+const CATEGORY_COLORS: Record<string, string> = {
+  productivity: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  business: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  education: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  creative: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  technical: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+  wellness: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+  all: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+}
+
+const PERSONALITY_MAX = 500
 
 interface AgentFormProps {
   agent?: Agent
   defaultTemplateId?: string
 }
 
-/**
- * Form for creating or editing an AI agent.
- * Handles template selection, personality customization, and submission.
- */
+const STEPS = ['Template', 'Personality', 'Preview'] as const
+
 export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
   const t = useTranslations('agents')
   const router = useRouter()
-
   const isEditing = !!agent
 
-  const defaultTemplate = AGENT_TEMPLATES.find((t) => t.id === (agent?.templateId ?? defaultTemplateId)) ?? AGENT_TEMPLATES[0]
+  const defaultTemplate =
+    AGENT_TEMPLATES.find((t) => t.id === (agent?.templateId ?? defaultTemplateId)) ?? AGENT_TEMPLATES[0]
 
+  const [step, setStep] = useState(isEditing ? 1 : 0)
+  const [templateId, setTemplateId] = useState(agent?.templateId ?? defaultTemplate.id)
   const [name, setName] = useState(agent?.name ?? '')
-  const [emoji, setEmoji] = useState(agent?.emoji ?? '🤖')
-  const [templateId, setTemplateId] = useState(agent?.templateId ?? (defaultTemplateId ?? AGENT_TEMPLATES[0].id))
+  const [emoji, setEmoji] = useState(agent?.emoji ?? defaultTemplate.emoji)
   const [personality, setPersonality] = useState(agent?.personality ?? defaultTemplate.personality)
   const [tone, setTone] = useState(agent?.tone ?? 'professional')
   const [locale, setLocale] = useState(agent?.locale ?? 'pt-BR')
@@ -50,17 +62,23 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleTemplateChange = (newTemplateId: string) => {
-    setTemplateId(newTemplateId)
-    const template = AGENT_TEMPLATES.find((t) => t.id === newTemplateId)
-    if (template && !isEditing) {
-      setPersonality(template.personality)
-      setEmoji(template.emoji)
+  const selectedTemplate = AGENT_TEMPLATES.find((t) => t.id === templateId) ?? AGENT_TEMPLATES[0]
+
+  const handleTemplateSelect = (id: string) => {
+    setTemplateId(id)
+    const tmpl = AGENT_TEMPLATES.find((t) => t.id === id)
+    if (tmpl) {
+      setEmoji(tmpl.emoji)
+      setPersonality(tmpl.personality)
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const previewPrompt = buildSystemPrompt(
+    { name: name || 'My Agent', emoji, templateId, personality, tone, locale, extraSoul },
+    { name: 'User' }
+  )
+
+  const handleSubmit = async () => {
     setIsLoading(true)
     setError('')
 
@@ -79,18 +97,13 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
       const data = await res.json()
 
       if (!res.ok) {
-        const details = data.details
-        if (details) {
-          const firstError = Object.values(details).flat()[0] as string
-          setError(firstError ?? data.error)
-        } else {
-          setError(data.error ?? 'Something went wrong')
-        }
+        const firstError = data.details
+          ? (Object.values(data.details).flat()[0] as string)
+          : data.error
+        setError(firstError ?? 'Something went wrong')
+        setStep(1)
       } else {
-        toast({
-          title: isEditing ? t('agentUpdated') : t('agentCreated'),
-          variant: 'default',
-        })
+        toast({ title: isEditing ? t('agentUpdated') : t('agentCreated') })
         router.push(`/agents/${data.data.id}`)
         router.refresh()
       }
@@ -104,158 +117,311 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
   return (
     <>
       <Toaster />
-      <motion.form
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        onSubmit={handleSubmit}
-        className="space-y-8 max-w-2xl"
-      >
-        {error && (
-          <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
-            {error}
+
+      {/* Step indicator */}
+      <div className="flex items-center gap-2 mb-8">
+        {STEPS.map((label, i) => (
+          <div key={label} className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <div
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors',
+                  i < step
+                    ? 'bg-primary text-primary-foreground'
+                    : i === step
+                    ? 'bg-primary text-primary-foreground ring-2 ring-primary/30 ring-offset-2'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                {i < step ? <Check className="h-3.5 w-3.5" /> : i + 1}
+              </div>
+              <span
+                className={cn(
+                  'text-sm font-medium hidden sm:block',
+                  i === step ? 'text-foreground' : 'text-muted-foreground'
+                )}
+              >
+                {label}
+              </span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div className={cn('h-px w-8 sm:w-12 transition-colors', i < step ? 'bg-primary' : 'bg-border')} />
+            )}
           </div>
+        ))}
+      </div>
+
+      {error && (
+        <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive mb-6">
+          {error}
+        </div>
+      )}
+
+      <AnimatePresence mode="wait">
+        {/* ── Step 0: Template picker ── */}
+        {step === 0 && (
+          <motion.div
+            key="step0"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <div>
+              <h2 className="text-lg font-semibold">Choose a template</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Pick a starting personality for your agent. You can customize it in the next step.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {AGENT_TEMPLATES.map((tmpl) => {
+                const isFreeAgent = tmpl.id === 'free-agent'
+                const isSelected = templateId === tmpl.id
+                return (
+                  <button
+                    key={tmpl.id}
+                    type="button"
+                    onClick={() => handleTemplateSelect(tmpl.id)}
+                    className={cn(
+                      'text-left rounded-xl border-2 p-4 transition-all duration-150 space-y-2',
+                      isFreeAgent ? 'border-dashed' : '',
+                      isSelected
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/40 hover:bg-muted/40'
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-3xl">{tmpl.emoji}</span>
+                      {isSelected && (
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shrink-0">
+                          <Check className="h-3 w-3" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{tmpl.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{tmpl.description}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {tmpl.categories.map((cat) => (
+                        <span
+                          key={cat}
+                          className={cn('text-xs px-1.5 py-0.5 rounded font-medium', CATEGORY_COLORS[cat])}
+                        >
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={() => setStep(1)}>
+                Continue
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </motion.div>
         )}
 
-        {/* Identity */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Identity</h2>
+        {/* ── Step 1: Identity & Personality ── */}
+        {step === 1 && (
+          <motion.div
+            key="step1"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-8 max-w-2xl"
+          >
+            {/* Identity */}
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Identity</h2>
 
-          {/* Emoji picker */}
-          <div className="space-y-2">
-            <Label>Emoji</Label>
-            <div className="flex flex-wrap gap-2">
-              {EMOJI_OPTIONS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => setEmoji(e)}
-                  className={`text-2xl p-2 rounded-lg border-2 transition-all ${
-                    emoji === e ? 'border-primary bg-primary/10' : 'border-transparent hover:border-border'
-                  }`}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="name">{t('name')}</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('namePlaceholder')}
-              required
-              disabled={isLoading}
-            />
-          </div>
-        </section>
-
-        {/* Template */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Template</h2>
-
-          <div className="space-y-2">
-            <Label>{t('template')}</Label>
-            <Select value={templateId} onValueChange={handleTemplateChange} disabled={isLoading}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AGENT_TEMPLATES.map((template) => (
-                  <SelectItem key={template.id} value={template.id}>
-                    <span className="flex items-center gap-2">
-                      <span>{template.emoji}</span>
-                      <span>{template.name}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </section>
-
-        {/* Personality */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Personality</h2>
-
-          <div className="space-y-2">
-            <Label htmlFor="personality">{t('personality')}</Label>
-            <Textarea
-              id="personality"
-              value={personality}
-              onChange={(e) => setPersonality(e.target.value)}
-              placeholder={t('personalityPlaceholder')}
-              rows={5}
-              required
-              disabled={isLoading}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>{t('tone')}</Label>
-              <Select value={tone} onValueChange={setTone} disabled={isLoading}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {AGENT_TONES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>
-                      {t.label}
-                    </SelectItem>
+              <div className="space-y-2">
+                <Label>Emoji</Label>
+                <div className="flex flex-wrap gap-2">
+                  {EMOJI_OPTIONS.map((e) => (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => setEmoji(e)}
+                      className={cn(
+                        'text-2xl p-2 rounded-lg border-2 transition-all',
+                        emoji === e ? 'border-primary bg-primary/10' : 'border-transparent hover:border-border'
+                      )}
+                    >
+                      {e}
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="name">{t('name')}</Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t('namePlaceholder')}
+                  disabled={isLoading}
+                />
+              </div>
+            </section>
+
+            {/* Personality */}
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Personality</h2>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="personality">{t('personality')}</Label>
+                  <span
+                    className={cn(
+                      'text-xs',
+                      personality.length > PERSONALITY_MAX * 0.9
+                        ? 'text-destructive'
+                        : 'text-muted-foreground'
+                    )}
+                  >
+                    {personality.length}/{PERSONALITY_MAX}
+                  </span>
+                </div>
+                <Textarea
+                  id="personality"
+                  value={personality}
+                  onChange={(e) => setPersonality(e.target.value.slice(0, PERSONALITY_MAX))}
+                  placeholder={t('personalityPlaceholder')}
+                  rows={5}
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t('tone')}</Label>
+                  <Select value={tone} onValueChange={setTone} disabled={isLoading}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AGENT_TONES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('locale')}</Label>
+                  <Select value={locale} onValueChange={setLocale} disabled={isLoading}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pt-BR">🇧🇷 Português (BR)</SelectItem>
+                      <SelectItem value="en">🇺🇸 English</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="extraSoul">
+                  {t('extraSoul')}{' '}
+                  <span className="text-muted-foreground text-xs">(optional)</span>
+                </Label>
+                <Textarea
+                  id="extraSoul"
+                  value={extraSoul}
+                  onChange={(e) => setExtraSoul(e.target.value)}
+                  placeholder={t('extraSoulPlaceholder')}
+                  rows={3}
+                  disabled={isLoading}
+                />
+              </div>
+            </section>
+
+            <div className="flex gap-3">
+              {!isEditing && (
+                <Button type="button" variant="outline" onClick={() => setStep(0)}>
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </Button>
+              )}
+              <Button
+                onClick={() => setStep(2)}
+                disabled={!name.trim() || !personality.trim()}
+              >
+                Preview
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => router.back()}>
+                Cancel
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── Step 2: Preview ── */}
+        {step === 2 && (
+          <motion.div
+            key="step2"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6 max-w-2xl"
+          >
+            <div>
+              <h2 className="text-lg font-semibold">Preview your agent</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                This is the system prompt that will be sent to Claude.
+              </p>
             </div>
 
+            {/* Agent card preview */}
+            <div className="rounded-xl border bg-card p-5 flex items-center gap-4">
+              <div className="text-5xl shrink-0">{emoji}</div>
+              <div>
+                <p className="font-semibold text-lg">{name || 'My Agent'}</p>
+                <p className="text-sm text-muted-foreground">{selectedTemplate.name} · {tone}</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">
+                  {locale === 'pt-BR' ? '🇧🇷 Portuguese' : '🇺🇸 English'}
+                </p>
+              </div>
+            </div>
+
+            {/* System prompt preview */}
             <div className="space-y-2">
-              <Label>{t('locale')}</Label>
-              <Select value={locale} onValueChange={setLocale} disabled={isLoading}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pt-BR">🇧🇷 Português (BR)</SelectItem>
-                  <SelectItem value="en">🇺🇸 English</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>System prompt (read-only)</Label>
+              <div className="rounded-lg border bg-muted/30 p-4 text-xs font-mono text-muted-foreground whitespace-pre-wrap max-h-64 overflow-y-auto leading-relaxed">
+                {previewPrompt}
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="extraSoul">
-              {t('extraSoul')}{' '}
-              <span className="text-muted-foreground text-xs">(optional)</span>
-            </Label>
-            <Textarea
-              id="extraSoul"
-              value={extraSoul}
-              onChange={(e) => setExtraSoul(e.target.value)}
-              placeholder={t('extraSoulPlaceholder')}
-              rows={3}
-              disabled={isLoading}
-            />
-          </div>
-        </section>
-
-        <div className="flex gap-3">
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-                {isEditing ? t('saveChanges') : t('createAgent')}
-              </>
-            )}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => router.back()}>
-            Cancel
-          </Button>
-        </div>
-      </motion.form>
+            <div className="flex gap-3">
+              <Button type="button" variant="outline" onClick={() => setStep(1)}>
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
+              <Button onClick={handleSubmit} disabled={isLoading}>
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    {isEditing ? t('saveChanges') : t('createAgent')}
+                  </>
+                )}
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   )
 }
