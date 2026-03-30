@@ -131,7 +131,7 @@ export async function POST(req: Request) {
         'X-Internal-Secret': INTERNAL_SECRET,
       },
       body: pythonBody,
-      // @ts-ignore — duplex required for streaming body in Node.js 18+
+      // @ts-expect-error — duplex required for streaming body in Node.js 18+
       duplex: 'half',
       cache: 'no-store',
     })

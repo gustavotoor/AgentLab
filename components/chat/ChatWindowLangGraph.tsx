@@ -43,7 +43,7 @@ export function ChatWindowLangGraph({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const { messages, streamingContent, isLoading, sseEvents, conversationId, sendMessage, setInitialMessages } =
+  const { messages, streamingContent, isLoading, sseEvents, sendMessage, setInitialMessages } =
     useAgentStream({
       agentId: agent.id,
       conversationId: initialConversationId ?? null,
