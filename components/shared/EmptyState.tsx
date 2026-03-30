@@ -1,3 +1,6 @@
+'use client'
+
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { LucideIcon } from 'lucide-react'
@@ -11,8 +14,10 @@ interface EmptyStateProps {
   description?: string
   /** Action button label */
   actionLabel?: string
-  /** Action button click handler */
+  /** Action button click handler (client-side only) */
   onAction?: () => void
+  /** Action button href (works in Server Components) */
+  actionHref?: string
   /** Additional CSS classes */
   className?: string
   /** Emoji to display instead of icon */
@@ -28,6 +33,7 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  actionHref,
   className,
   emoji,
 }: EmptyStateProps) {
@@ -52,7 +58,12 @@ export function EmptyState({
         <h3 className="text-lg font-semibold">{title}</h3>
         {description && <p className="text-sm text-muted-foreground max-w-sm">{description}</p>}
       </div>
-      {actionLabel && onAction && (
+      {actionLabel && actionHref && (
+        <Button asChild className="mt-2">
+          <Link href={actionHref}>{actionLabel}</Link>
+        </Button>
+      )}
+      {actionLabel && onAction && !actionHref && (
         <Button onClick={onAction} className="mt-2">
           {actionLabel}
         </Button>
