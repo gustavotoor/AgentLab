@@ -1,15 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { Edit2 } from 'lucide-react'
+import { Edit2, FlaskConical, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ChatWindow } from '@/components/chat/ChatWindow'
+import { ChatWindowLangGraph } from '@/components/chat/ChatWindowLangGraph'
 import { ConversationSidebar } from '@/components/chat/ConversationSidebar'
+import { LabPanel } from '@/components/lab/LabPanel'
 import { PageLoader } from '@/components/shared/LoadingSpinner'
 import type { Agent, Conversation, Message } from '@prisma/client'
+import type { SSEEvent } from '@/types/agent-stream'
 
 interface ConversationWithStats extends Conversation {
   _count: { messages: number }
@@ -21,9 +24,6 @@ interface PageProps {
   searchParams: Promise<{ convoId?: string }>
 }
 
-/**
- * Agent chat page. Loads agent + conversations, allows switching between chats.
- */
 export default function AgentChatPage({ params, searchParams }: PageProps) {
   const { data: session } = useSession()
   const router = useRouter()
@@ -34,6 +34,12 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
   const [currentConvoId, setCurrentConvoId] = useState<string | undefined>(undefined)
   const [currentMessages, setCurrentMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(true)
+
+  // LangGraph lab state
+  const [sseEvents, setSseEvents] = useState<SSEEvent[]>([])
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [delayMode, setDelayMode] = useState(false)
+  const [labOpen, setLabOpen] = useState(true)
 
   useEffect(() => {
     async function init() {
@@ -58,7 +64,6 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
         setAgent(agentData.data)
         setConversations(convosData.data ?? [])
 
-        // Load specific conversation if provided
         if (convoId) {
           setCurrentConvoId(convoId)
           const messagesRes = await fetch(`/api/conversations/${id}/${convoId}`)
@@ -80,11 +85,13 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
   const handleNewConversation = () => {
     setCurrentConvoId(undefined)
     setCurrentMessages([])
+    setSseEvents([])
   }
 
   const handleSelectConversation = async (convoId: string) => {
     if (!agentId) return
     setCurrentConvoId(convoId)
+    setSseEvents([])
 
     try {
       const res = await fetch(`/api/conversations/${agentId}/${convoId}`)
@@ -97,7 +104,7 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
     }
   }
 
-  const handleConversationCreated = (newConvoId: string) => {
+  const handleConversationCreated = useCallback((newConvoId: string) => {
     setCurrentConvoId(newConvoId)
     if (agentId) {
       fetch(`/api/conversations/${agentId}`)
@@ -105,11 +112,14 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
         .then((d) => setConversations(d.data ?? []))
         .catch(() => {})
     }
-  }
+  }, [agentId])
 
   if (isLoading || !agent) {
     return <PageLoader label="Loading agent..." />
   }
+
+  const isLangGraph = agent.langGraphEnabled
+  const showLab = isLangGraph && labOpen
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -123,6 +133,17 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {isLangGraph && (
+            <Button
+              variant={labOpen ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setLabOpen(!labOpen)}
+              className="gap-1.5"
+            >
+              <FlaskConical className="h-4 w-4" />
+              Lab
+            </Button>
+          )}
           <Button asChild variant="ghost" size="sm">
             <Link href={`/agents/${agent.id}/edit`}>
               <Edit2 className="h-4 w-4" />
@@ -132,7 +153,7 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
         </div>
       </header>
 
-      {/* Chat area with sidebar */}
+      {/* Chat + Lab area */}
       <div className="flex flex-1 overflow-hidden">
         <ConversationSidebar
           agentId={agent.id}
@@ -142,16 +163,43 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
           onSelectConversation={handleSelectConversation}
         />
 
-        <div className="flex-1 overflow-hidden">
-          <ChatWindow
-            key={currentConvoId ?? 'new'}
-            agent={agent}
-            conversationId={currentConvoId}
-            initialMessages={currentMessages}
-            apiKeyValid={session?.user?.apiKeyValid ?? false}
-            onConversationCreated={handleConversationCreated}
-          />
+        {/* Chat window */}
+        <div className={`flex-1 overflow-hidden ${showLab ? 'border-r border-border' : ''}`}>
+          {isLangGraph ? (
+            <ChatWindowLangGraph
+              key={currentConvoId ?? 'new'}
+              agent={agent}
+              conversationId={currentConvoId}
+              initialMessages={currentMessages}
+              apiKeyValid={session?.user?.apiKeyValid ?? false}
+              onConversationCreated={handleConversationCreated}
+              onSseEventsChange={setSseEvents}
+              onStreamingChange={setIsStreaming}
+              delayMode={delayMode}
+            />
+          ) : (
+            <ChatWindow
+              key={currentConvoId ?? 'new'}
+              agent={agent}
+              conversationId={currentConvoId}
+              initialMessages={currentMessages}
+              apiKeyValid={session?.user?.apiKeyValid ?? false}
+              onConversationCreated={handleConversationCreated}
+            />
+          )}
         </div>
+
+        {/* Lab Panel */}
+        {showLab && (
+          <div className="w-[380px] shrink-0 overflow-hidden flex flex-col">
+            <LabPanel
+              sseEvents={sseEvents}
+              isStreaming={isStreaming}
+              delayMode={delayMode}
+              onDelayModeChange={setDelayMode}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

@@ -69,6 +69,8 @@ export const apiKeySchema = z.object({
     .regex(/^sk-ant-/, 'Must be a valid Anthropic API key (starts with sk-ant-)'),
 })
 
+const AVAILABLE_TOOLS = ['web_search', 'calculator', 'datetime'] as const
+
 /** Schema for agent creation/update */
 export const agentSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -78,6 +80,8 @@ export const agentSchema = z.object({
   tone: z.string().min(1, 'Tone is required'),
   locale: z.enum(['pt-BR', 'en']).default('pt-BR'),
   extraSoul: z.string().max(1000).optional(),
+  langGraphEnabled: z.boolean().default(false),
+  availableTools: z.array(z.enum(AVAILABLE_TOOLS)).default([]),
 })
 
 /** Schema for chat message */

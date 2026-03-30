@@ -20,7 +20,14 @@ import { toast } from '@/hooks/use-toast'
 import { Toaster } from '@/components/ui/toaster'
 import { AGENT_TEMPLATES, AGENT_TONES, buildSystemPrompt } from '@/lib/prompts'
 import { cn } from '@/lib/utils'
+import { sanitize } from '@/lib/sanitizer'
 import type { Agent } from '@prisma/client'
+
+const AVAILABLE_TOOLS = [
+  { id: 'web_search', label: '🔍 Busca na web', description: 'Requer TAVILY_API_KEY no servidor' },
+  { id: 'calculator', label: '🧮 Calculadora', description: 'Expressões matemáticas seguras' },
+  { id: 'datetime', label: '🕐 Data/Hora', description: 'Data e hora atuais com timezone' },
+] as const
 
 const EMOJI_OPTIONS = ['🤖', '🦾', '🧠', '⚡', '🎯', '🚀', '💡', '🔮', '🦁', '🐺', '🦊', '🐉', '👾', '🎭', '🌟', '💎']
 
@@ -59,6 +66,8 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
   const [tone, setTone] = useState(agent?.tone ?? 'professional')
   const [locale, setLocale] = useState(agent?.locale ?? 'pt-BR')
   const [extraSoul, setExtraSoul] = useState(agent?.extraSoul ?? '')
+  const [langGraphEnabled, setLangGraphEnabled] = useState(agent?.langGraphEnabled ?? false)
+  const [availableTools, setAvailableTools] = useState<string[]>(agent?.availableTools ?? [])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -82,7 +91,21 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
     setIsLoading(true)
     setError('')
 
-    const payload = { name, emoji, templateId, personality, tone, locale, extraSoul: extraSoul || undefined }
+    // Sanitize personality and extraSoul before sending
+    const { text: cleanPersonality } = sanitize(personality)
+    const { text: cleanExtraSoul } = extraSoul ? sanitize(extraSoul) : { text: '' }
+
+    const payload = {
+      name,
+      emoji,
+      templateId,
+      personality: cleanPersonality,
+      tone,
+      locale,
+      extraSoul: cleanExtraSoul || undefined,
+      langGraphEnabled,
+      availableTools,
+    }
 
     try {
       const url = isEditing ? `/api/agents/${agent.id}` : '/api/agents'
@@ -344,6 +367,71 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
                   disabled={isLoading}
                 />
               </div>
+            </section>
+
+            {/* LangGraph Lab */}
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">🔬 LangGraph Lab</h2>
+
+              <div className="flex items-start justify-between rounded-lg border p-4 gap-4">
+                <div>
+                  <p className="text-sm font-medium">Ativar modo laboratório</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    O agente usará LangGraph + Langfuse. Um painel lateral mostrará as decisões em tempo real.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={langGraphEnabled}
+                  onClick={() => setLangGraphEnabled(!langGraphEnabled)}
+                  disabled={isLoading}
+                  className={cn(
+                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0',
+                    langGraphEnabled ? 'bg-primary' : 'bg-muted'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                      langGraphEnabled ? 'translate-x-6' : 'translate-x-1'
+                    )}
+                  />
+                </button>
+              </div>
+
+              {langGraphEnabled && (
+                <div className="space-y-2 pl-1">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider">Ferramentas disponíveis</Label>
+                  <div className="space-y-2">
+                    {AVAILABLE_TOOLS.map((tool) => {
+                      const checked = availableTools.includes(tool.id)
+                      return (
+                        <label
+                          key={tool.id}
+                          className="flex items-start gap-3 cursor-pointer rounded-md border p-3 hover:bg-muted/40 transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setAvailableTools((prev) =>
+                                checked ? prev.filter((t) => t !== tool.id) : [...prev, tool.id]
+                              )
+                            }
+                            disabled={isLoading}
+                            className="mt-0.5"
+                          />
+                          <div>
+                            <p className="text-sm font-medium">{tool.label}</p>
+                            <p className="text-xs text-muted-foreground">{tool.description}</p>
+                          </div>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </section>
 
             <div className="flex gap-3">

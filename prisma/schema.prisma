@@ -48,11 +48,13 @@ model Agent {
   tone          String
   locale        String         @default("pt-BR")
   extraSoul     String?
-  systemPrompt  String
-  totalChats    Int            @default(0)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  conversations Conversation[]
+  systemPrompt      String
+  totalChats        Int            @default(0)
+  langGraphEnabled  Boolean        @default(false)
+  availableTools    String[]       @default([])
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  conversations     Conversation[]
 }
 
 model Conversation {
