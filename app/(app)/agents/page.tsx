@@ -65,7 +65,7 @@ export default async function AgentsPage({
       <div className="flex-1 overflow-y-auto p-6">
         {agents.length === 0 ? (
           <EmptyState
-            icon={Bot}
+            icon={<Bot className="h-8 w-8 text-muted-foreground" />}
             title={t('noAgents')}
             description={t('noAgentsDesc')}
             actionLabel={t('createAgent')}

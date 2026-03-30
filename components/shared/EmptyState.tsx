@@ -3,11 +3,9 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import type { LucideIcon } from 'lucide-react'
-
 interface EmptyStateProps {
-  /** Icon to display */
-  icon?: LucideIcon
+  /** Icon to display (pass as JSX, e.g. <Bot className="h-8 w-8 text-muted-foreground" />) */
+  icon?: React.ReactNode
   /** Main heading text */
   title: string
   /** Supporting description text */
@@ -51,7 +49,7 @@ export function EmptyState({
       )}
       {Icon && !emoji && (
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-          <Icon className="h-8 w-8 text-muted-foreground" />
+          {Icon}
         </div>
       )}
       <div className="space-y-2">
