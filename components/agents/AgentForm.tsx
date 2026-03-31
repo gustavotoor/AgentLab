@@ -68,19 +68,31 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
   const [extraSoul, setExtraSoul] = useState(agent?.extraSoul ?? '')
   const [langGraphEnabled, setLangGraphEnabled] = useState(agent?.langGraphEnabled ?? false)
   const [availableTools, setAvailableTools] = useState<string[]>(agent?.availableTools ?? [])
-  const [model, setModel] = useState(agent?.model ?? 'claude-sonnet-4-6')
+  const [provider, setProvider] = useState<'anthropic' | 'openai'>(
+    (agent?.provider as 'anthropic' | 'openai') ?? 'anthropic'
+  )
+  const defaultModel = provider === 'openai' ? 'gpt-5' : 'claude-sonnet-4-6'
+  const [model, setModel] = useState(agent?.model ?? defaultModel)
   const [availableModels, setAvailableModels] = useState<{ id: string; name: string }[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch('/api/models')
+    fetch(`/api/models?provider=${provider}`)
       .then((r) => r.json())
       .then((d) => {
-        if (d.data?.length) setAvailableModels(d.data)
+        if (d.data?.length) {
+          setAvailableModels(d.data)
+          // Reset model to first available when provider changes (unless editing with existing model)
+          if (!agent?.model || agent.provider !== provider) {
+            setModel(d.data[0].id)
+          }
+        } else {
+          setAvailableModels([])
+        }
       })
       .catch(() => {})
-  }, [])
+  }, [provider]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedTemplate = AGENT_TEMPLATES.find((t) => t.id === templateId) ?? AGENT_TEMPLATES[0]
 
@@ -117,6 +129,7 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
       langGraphEnabled,
       availableTools,
       model,
+      provider,
     }
 
     try {
@@ -365,28 +378,47 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Modelo</Label>
-                <Select value={model} onValueChange={setModel} disabled={isLoading}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um modelo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableModels.length > 0 ? (
-                      availableModels.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value={model}>{model}</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Modelos agênticos disponíveis na sua chave Anthropic.
-                </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Provider</Label>
+                  <Select
+                    value={provider}
+                    onValueChange={(v) => setProvider(v as 'anthropic' | 'openai')}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="anthropic">Anthropic</SelectItem>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Modelo</Label>
+                  <Select value={model} onValueChange={setModel} disabled={isLoading}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um modelo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableModels.length > 0 ? (
+                        availableModels.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value={model}>{model}</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground -mt-2">
+                Modelos agênticos disponíveis na sua chave {provider === 'openai' ? 'OpenAI' : 'Anthropic'}.
+              </p>
 
               <div className="space-y-2">
                 <Label htmlFor="extraSoul">

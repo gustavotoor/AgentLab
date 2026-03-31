@@ -25,6 +25,8 @@ export default async function SettingsPage() {
       theme: true,
       apiKeyMasked: true,
       apiKeyValid: true,
+      openaiKeyMasked: true,
+      openaiKeyValid: true,
     },
   })
 

@@ -61,12 +61,20 @@ export const changePasswordSchema = z
     path: ['confirmPassword'],
   })
 
-/** Schema for API key update */
+/** Schema for Anthropic API key update */
 export const apiKeySchema = z.object({
   apiKey: z
     .string()
     .min(1, 'API key is required')
     .regex(/^sk-ant-/, 'Must be a valid Anthropic API key (starts with sk-ant-)'),
+})
+
+/** Schema for OpenAI API key update */
+export const openaiKeySchema = z.object({
+  apiKey: z
+    .string()
+    .min(1, 'API key is required')
+    .regex(/^sk-/, 'Must be a valid OpenAI API key (starts with sk-)'),
 })
 
 const AVAILABLE_TOOLS = ['web_search', 'calculator', 'datetime'] as const
@@ -83,6 +91,7 @@ export const agentSchema = z.object({
   langGraphEnabled: z.boolean().default(false),
   availableTools: z.array(z.enum(AVAILABLE_TOOLS)).default([]),
   model: z.string().max(100).default('claude-sonnet-4-6'),
+  provider: z.enum(['anthropic', 'openai']).default('anthropic'),
 })
 
 /** Schema for chat message */
@@ -100,5 +109,6 @@ export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>
 export type ApiKeyInput = z.infer<typeof apiKeySchema>
+export type OpenAIKeyInput = z.infer<typeof openaiKeySchema>
 export type AgentInput = z.infer<typeof agentSchema>
 export type ChatMessageInput = z.infer<typeof chatMessageSchema>

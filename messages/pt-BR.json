@@ -220,7 +220,14 @@
     "apiKeySaved": "Chave de API salva com sucesso!",
     "getApiKey": "Obter chave na Anthropic Console",
     "byokTitle": "Traga sua própria chave (BYOK)",
-    "byokDesc": "O AgentLab usa sua chave de API Anthropic para alimentar seus agentes. Sua chave nunca é compartilhada."
+    "byokDesc": "O AgentLab usa sua chave de API Anthropic para alimentar seus agentes. Sua chave nunca é compartilhada.",
+    "openaiApiKey": "Chave de API OpenAI",
+    "openaiApiKeyPlaceholder": "sk-...",
+    "openaiByokTitle": "Chave OpenAI (BYOK)",
+    "openaiByokDesc": "Use sua chave de API OpenAI para usar modelos GPT. Sua chave nunca é compartilhada.",
+    "getOpenaiKey": "Obter chave na Plataforma OpenAI",
+    "openaiKeySaved": "Chave OpenAI salva com sucesso!",
+    "removeOpenaiKey": "Remover chave OpenAI"
   },
   "onboarding": {
     "title": "Bem-vindo ao AgentLab!",

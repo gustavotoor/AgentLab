@@ -33,6 +33,8 @@ interface UserData {
   theme: string
   apiKeyMasked: string | null
   apiKeyValid: boolean
+  openaiKeyMasked: string | null
+  openaiKeyValid: boolean
 }
 
 export function SettingsTabs({ user }: { user: UserData }) {
@@ -55,7 +57,7 @@ export function SettingsTabs({ user }: { user: UserData }) {
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [showPasswords, setShowPasswords] = useState(false)
 
-  // API key
+  // Anthropic API key
   const [apiKey, setApiKey] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
   const [apiKeyLoading, setApiKeyLoading] = useState(false)
@@ -63,6 +65,15 @@ export function SettingsTabs({ user }: { user: UserData }) {
   const [apiKeyMasked, setApiKeyMasked] = useState(user.apiKeyMasked)
   const [apiKeyValid, setApiKeyValid] = useState(user.apiKeyValid)
   const [apiKeyDeleteOpen, setApiKeyDeleteOpen] = useState(false)
+
+  // OpenAI API key
+  const [openaiKey, setOpenaiKey] = useState('')
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false)
+  const [openaiKeyLoading, setOpenaiKeyLoading] = useState(false)
+  const [openaiKeyDeleteLoading, setOpenaiKeyDeleteLoading] = useState(false)
+  const [openaiKeyMasked, setOpenaiKeyMasked] = useState(user.openaiKeyMasked)
+  const [openaiKeyValid, setOpenaiKeyValid] = useState(user.openaiKeyValid)
+  const [openaiKeyDeleteOpen, setOpenaiKeyDeleteOpen] = useState(false)
 
   // Delete account
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -166,6 +177,51 @@ export function SettingsTabs({ user }: { user: UserData }) {
       toast({ title: 'Network error', variant: 'destructive' })
     } finally {
       setApiKeyDeleteLoading(false)
+    }
+  }
+
+  const handleOpenaiKeySave = async () => {
+    if (!openaiKey.trim()) return
+    setOpenaiKeyLoading(true)
+    try {
+      const res = await fetch('/api/user/openai-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: openaiKey.trim() }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setOpenaiKeyMasked(data.data.masked)
+        setOpenaiKeyValid(true)
+        setOpenaiKey('')
+        toast({ title: t('openaiKeySaved') })
+      } else {
+        const data = await res.json()
+        toast({ title: data.error ?? 'Failed to save OpenAI API key', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' })
+    } finally {
+      setOpenaiKeyLoading(false)
+    }
+  }
+
+  const handleOpenaiKeyDelete = async () => {
+    setOpenaiKeyDeleteLoading(true)
+    try {
+      const res = await fetch('/api/user/openai-key', { method: 'DELETE' })
+      if (res.ok) {
+        setOpenaiKeyMasked(null)
+        setOpenaiKeyValid(false)
+        setOpenaiKeyDeleteOpen(false)
+        toast({ title: 'OpenAI API key removed' })
+      } else {
+        toast({ title: 'Failed to remove OpenAI API key', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' })
+    } finally {
+      setOpenaiKeyDeleteLoading(false)
     }
   }
 
@@ -380,6 +436,94 @@ export function SettingsTabs({ user }: { user: UserData }) {
 
             <Button onClick={handleApiKeySave} disabled={apiKeyLoading || !apiKey.trim()}>
               {apiKeyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t('saveApiKey')}
+            </Button>
+          </div>
+
+          {/* ── OpenAI ── */}
+          <div className="space-y-4 pt-2 border-t">
+            <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">{t('openaiByokTitle')}</h3>
+              <p className="text-xs text-emerald-700 dark:text-emerald-400">{t('openaiByokDesc')}</p>
+              <a
+                href="https://platform.openai.com/api-keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t('getOpenaiKey')}
+              </a>
+            </div>
+
+            {openaiKeyMasked && (
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+                <div className="flex items-center gap-2">
+                  {openaiKeyValid ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium font-mono">{openaiKeyMasked}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {openaiKeyValid ? t('apiKeyValid') : t('apiKeyInvalid')}
+                    </p>
+                  </div>
+                </div>
+
+                <Dialog open={openaiKeyDeleteOpen} onOpenChange={setOpenaiKeyDeleteOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>{t('removeOpenaiKey')}</DialogTitle>
+                      <DialogDescription>
+                        This will remove your OpenAI API key. Agents using OpenAI models won&apos;t work until you add a new one.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setOpenaiKeyDeleteOpen(false)}>Cancel</Button>
+                      <Button
+                        variant="destructive"
+                        onClick={handleOpenaiKeyDelete}
+                        disabled={openaiKeyDeleteLoading}
+                      >
+                        {openaiKeyDeleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+                        Remove key
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>{openaiKeyMasked ? 'Update OpenAI key' : t('openaiApiKey')}</Label>
+              <div className="relative">
+                <Input
+                  type={showOpenaiKey ? 'text' : 'password'}
+                  value={openaiKey}
+                  onChange={(e) => setOpenaiKey(e.target.value)}
+                  placeholder={t('openaiApiKeyPlaceholder')}
+                  className="pr-10 font-mono text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                >
+                  {showOpenaiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">{t('apiKeyDesc')}</p>
+            </div>
+
+            <Button onClick={handleOpenaiKeySave} disabled={openaiKeyLoading || !openaiKey.trim()}>
+              {openaiKeyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {t('saveApiKey')}
             </Button>
           </div>

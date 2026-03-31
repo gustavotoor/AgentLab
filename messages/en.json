@@ -220,7 +220,14 @@
     "apiKeySaved": "API key saved successfully!",
     "getApiKey": "Get key from Anthropic Console",
     "byokTitle": "Bring Your Own Key (BYOK)",
-    "byokDesc": "AgentLab uses your Anthropic API key to power your agents. Your key is never shared."
+    "byokDesc": "AgentLab uses your Anthropic API key to power your agents. Your key is never shared.",
+    "openaiApiKey": "OpenAI API Key",
+    "openaiApiKeyPlaceholder": "sk-...",
+    "openaiByokTitle": "OpenAI Key (BYOK)",
+    "openaiByokDesc": "Use your OpenAI API key to power agents with GPT models. Your key is never shared.",
+    "getOpenaiKey": "Get key from OpenAI Platform",
+    "openaiKeySaved": "OpenAI API key saved!",
+    "removeOpenaiKey": "Remove OpenAI key"
   },
   "onboarding": {
     "title": "Welcome to AgentLab!",

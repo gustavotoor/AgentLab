@@ -4,15 +4,15 @@ import { streamText } from 'ai'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
-import { createModel } from '@/lib/ai'
+import { createModelForProvider } from '@/lib/ai'
 
 export const maxDuration = 60
 
 /**
  * POST /api/chat
  * Streaming chat endpoint. Accepts agentId + conversationId + message,
- * loads history, calls Anthropic via user's BYOK, streams response,
- * and saves both messages on completion.
+ * loads history, calls the agent's configured provider via user's BYOK,
+ * streams response, and saves both messages on completion.
  */
 export async function POST(req: Request) {
   try {
@@ -32,15 +32,26 @@ export async function POST(req: Request) {
 
     if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
 
-    // Get user's API key
+    const provider = agent.provider ?? 'anthropic'
+    const isOpenAI = provider === 'openai'
+
+    // Get user's API key for the agent's provider
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { apiKeyEncrypted: true, apiKeyValid: true, name: true },
+      select: {
+        apiKeyEncrypted: true,
+        openaiKeyEncrypted: true,
+        apiKeyValid: true,
+        name: true,
+      },
     })
 
-    if (!user?.apiKeyEncrypted) {
+    const encryptedKey = isOpenAI ? user?.openaiKeyEncrypted : user?.apiKeyEncrypted
+    const providerLabel = isOpenAI ? 'OpenAI' : 'Anthropic'
+
+    if (!encryptedKey) {
       return NextResponse.json(
-        { error: 'No API key configured. Please add your Anthropic API key in settings.' },
+        { error: `No API key configured. Please add your ${providerLabel} API key in settings.` },
         { status: 402 }
       )
     }
@@ -48,7 +59,7 @@ export async function POST(req: Request) {
     // Decrypt API key
     let apiKey: string
     try {
-      apiKey = decrypt(user.apiKeyEncrypted)
+      apiKey = decrypt(encryptedKey)
     } catch {
       return NextResponse.json({ error: 'Failed to decrypt API key' }, { status: 500 })
     }
@@ -98,8 +109,8 @@ export async function POST(req: Request) {
       { role: 'user' as const, content: message },
     ]
 
-    // Create AI model with user's key and agent's chosen model
-    const model = createModel(apiKey, agent.model ?? undefined)
+    // Create AI model with user's key, provider, and agent's chosen model
+    const model = createModelForProvider(apiKey, provider, agent.model ?? undefined)
 
     // Stream response
     const result = streamText({
