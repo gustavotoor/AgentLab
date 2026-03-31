@@ -2,7 +2,7 @@
  * Rate limiter backed by Upstash Redis (production-safe, works across serverless instances).
  * Falls back to in-memory store when Upstash env vars are not configured (local dev only).
  *
- * Required env vars for production:
+ * Required env vars for production (configure in Dokploy dashboard):
  *   UPSTASH_REDIS_REST_URL   — from upstash.com console
  *   UPSTASH_REDIS_REST_TOKEN — from upstash.com console
  */

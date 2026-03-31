@@ -317,7 +317,7 @@ As specs 00–09 representam o design original. As specs 10–11 documentam func
 | [BYOK.md](docs/BYOK.md) | Arquitetura de criptografia das API keys |
 | [DATABASE.md](docs/DATABASE.md) | Schema Prisma e modelos |
 | [COMPONENTS.md](docs/COMPONENTS.md) | Biblioteca de componentes |
-| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deploy com Docker e Vercel |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deploy com Docker e Dokploy |
 | [SDD.md](docs/SDD.md) | Software Design Document |
 
 ---

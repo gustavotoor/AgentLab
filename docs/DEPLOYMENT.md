@@ -13,10 +13,10 @@ docker-compose logs -f app
 docker-compose exec app npx prisma migrate deploy
 ```
 
-## Vercel
+## Dokploy
 
-1. Connect your GitHub repository to Vercel
-2. Set environment variables in Vercel dashboard
+1. Conecte seu repositório GitHub ao Dokploy
+2. Configure as variáveis de ambiente no painel do Dokploy
 3. Deploy
 
 Required env vars:
