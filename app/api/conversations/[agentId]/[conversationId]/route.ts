@@ -60,9 +60,14 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
 
     if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
 
-    await prisma.conversation.delete({
-      where: { id: conversationId },
+    // deleteMany ensures the conversation belongs to this agent (prevents IDOR)
+    const { count } = await prisma.conversation.deleteMany({
+      where: { id: conversationId, agentId },
     })
+
+    if (count === 0) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+    }
 
     return NextResponse.json({ message: 'Conversation deleted' })
   } catch (error) {

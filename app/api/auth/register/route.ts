@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { registerSchema } from '@/lib/validations'
 import { generateToken, getTokenExpiry } from '@/lib/tokens'
 import { sendVerificationEmail } from '@/lib/email'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
 /**
  * POST /api/auth/register
@@ -11,6 +12,11 @@ import { sendVerificationEmail } from '@/lib/email'
  */
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req)
+    if (!rateLimit(`register:${ip}`, 5, 15 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 })
+    }
+
     const body = await req.json()
     const parsed = registerSchema.safeParse(body)
 

@@ -5,6 +5,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { createModelForProvider } from '@/lib/ai'
+import { sanitize } from '@/lib/sanitizer'
+import { rateLimit } from '@/lib/rate-limit'
 
 export const maxDuration = 60
 
@@ -18,6 +20,10 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    if (!rateLimit(`chat:${session.user.id}`, 30, 60 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 })
+    }
 
     const { agentId, conversationId, message } = await req.json()
 
@@ -100,11 +106,12 @@ export async function POST(req: Request) {
       },
     })
 
-    // Build messages array for the AI
+    // Build messages array for the AI — re-sanitize historical user messages to guard
+    // against stored prompt injection (e.g. if a past message was tampered in the DB).
     const messages = [
       ...history.map((m) => ({
         role: m.role as 'user' | 'assistant',
-        content: m.content,
+        content: m.role === 'user' ? sanitize(m.content).text : m.content,
       })),
       { role: 'user' as const, content: message },
     ]

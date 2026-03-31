@@ -12,17 +12,10 @@ export async function GET() {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const [totalAgents, agentsWithConvos, recentAgents] = await Promise.all([
+    const [totalAgents, totalConversations, totalMessages, recentAgents] = await Promise.all([
       prisma.agent.count({ where: { userId: session.user.id } }),
-      prisma.agent.findMany({
-        where: { userId: session.user.id },
-        include: {
-          _count: { select: { conversations: true } },
-          conversations: {
-            include: { _count: { select: { messages: true } } },
-          },
-        },
-      }),
+      prisma.conversation.count({ where: { agent: { userId: session.user.id } } }),
+      prisma.message.count({ where: { conversation: { agent: { userId: session.user.id } } } }),
       prisma.agent.findMany({
         where: { userId: session.user.id },
         orderBy: { updatedAt: 'desc' },
@@ -30,17 +23,6 @@ export async function GET() {
         include: { _count: { select: { conversations: true } } },
       }),
     ])
-
-    const totalConversations = agentsWithConvos.reduce(
-      (sum, a) => sum + a._count.conversations,
-      0
-    )
-
-    const totalMessages = agentsWithConvos.reduce(
-      (sum, a) =>
-        sum + a.conversations.reduce((s, c) => s + c._count.messages, 0),
-      0
-    )
 
     return NextResponse.json({
       data: {

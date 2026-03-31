@@ -6,11 +6,12 @@ import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { getTemplateById } from '@/lib/prompts'
 import { sanitize } from '@/lib/sanitizer'
+import { rateLimit } from '@/lib/rate-limit'
 
 export const maxDuration = 120
 
-const BACKEND_URL = process.env.BACKEND_INTERNAL_URL || 'http://localhost:8000'
-const INTERNAL_SECRET = process.env.INTERNAL_SECRET || ''
+const BACKEND_URL = process.env.BACKEND_INTERNAL_URL
+const INTERNAL_SECRET = process.env.INTERNAL_SECRET
 
 /**
  * POST /api/chat/langgraph
@@ -19,8 +20,21 @@ const INTERNAL_SECRET = process.env.INTERNAL_SECRET || ''
  */
 export async function POST(req: Request) {
   try {
+    if (!BACKEND_URL) {
+      console.error('[langgraph] BACKEND_INTERNAL_URL env var is not set')
+      return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
+    }
+    if (!INTERNAL_SECRET) {
+      console.error('[langgraph] INTERNAL_SECRET env var is not set')
+      return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
+    }
+
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    if (!rateLimit(`chat:${session.user.id}`, 30, 60 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 })
+    }
 
     const { agentId, conversationId, message, delayMode } = await req.json()
 
@@ -28,12 +42,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'agentId and message are required' }, { status: 400 })
     }
 
-    // Sanitize input before any processing
+    // Sanitize input — block if injection is detected
     const { text: cleanMessage, injectionDetected } = sanitize(message)
     if (injectionDetected) {
-      // Still allow through — Python will handle safely with injection_detected flag
-      // But log server-side
-      console.warn('[langgraph] Injection pattern detected in message from user:', session.user.id)
+      console.warn('[langgraph] Injection pattern blocked from user:', session.user.id)
+      return NextResponse.json({ error: 'Message contains disallowed content.' }, { status: 400 })
     }
 
     // Verify agent belongs to user and has LangGraph enabled

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { forgotPasswordSchema } from '@/lib/validations'
 import { generateToken, getTokenExpiry } from '@/lib/tokens'
 import { sendPasswordResetEmail } from '@/lib/email'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
 /**
  * POST /api/auth/forgot-password
@@ -10,6 +11,11 @@ import { sendPasswordResetEmail } from '@/lib/email'
  */
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req)
+    if (!rateLimit(`forgot-password:${ip}`, 5, 15 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 })
+    }
+
     const body = await req.json()
     const parsed = forgotPasswordSchema.safeParse(body)
 
