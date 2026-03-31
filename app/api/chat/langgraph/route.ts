@@ -50,22 +50,28 @@ export async function POST(req: Request) {
       )
     }
 
-    // Get user's API key
+    // Get user's API key for the agent's provider
+    const provider = agent.provider ?? 'anthropic'
+    const isOpenAI = provider === 'openai'
+    const providerLabel = isOpenAI ? 'OpenAI' : 'Anthropic'
+
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { apiKeyEncrypted: true, name: true },
+      select: { apiKeyEncrypted: true, openaiKeyEncrypted: true, name: true },
     })
 
-    if (!user?.apiKeyEncrypted) {
+    const encryptedKey = isOpenAI ? user?.openaiKeyEncrypted : user?.apiKeyEncrypted
+
+    if (!encryptedKey) {
       return NextResponse.json(
-        { error: 'No API key configured. Please add your Anthropic API key in settings.' },
+        { error: `No API key configured. Please add your ${providerLabel} API key in settings.` },
         { status: 402 }
       )
     }
 
     let apiKey: string
     try {
-      apiKey = decrypt(user.apiKeyEncrypted)
+      apiKey = decrypt(encryptedKey)
     } catch {
       return NextResponse.json({ error: 'Failed to decrypt API key' }, { status: 500 })
     }
@@ -111,6 +117,7 @@ export async function POST(req: Request) {
       available_tools: agent.availableTools,
       api_key: apiKey,
       model: agent.model ?? 'claude-sonnet-4-6',
+      provider: provider,
       lang_graph_enabled: true,
     }
 
