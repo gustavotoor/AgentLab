@@ -82,6 +82,7 @@ export const agentSchema = z.object({
   extraSoul: z.string().max(1000).optional(),
   langGraphEnabled: z.boolean().default(false),
   availableTools: z.array(z.enum(AVAILABLE_TOOLS)).default([]),
+  model: z.string().max(100).default('claude-sonnet-4-6'),
 })
 
 /** Schema for chat message */

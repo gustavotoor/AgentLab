@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -68,8 +68,19 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
   const [extraSoul, setExtraSoul] = useState(agent?.extraSoul ?? '')
   const [langGraphEnabled, setLangGraphEnabled] = useState(agent?.langGraphEnabled ?? false)
   const [availableTools, setAvailableTools] = useState<string[]>(agent?.availableTools ?? [])
+  const [model, setModel] = useState(agent?.model ?? 'claude-sonnet-4-6')
+  const [availableModels, setAvailableModels] = useState<{ id: string; name: string }[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch('/api/models')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.data?.length) setAvailableModels(d.data)
+      })
+      .catch(() => {})
+  }, [])
 
   const selectedTemplate = AGENT_TEMPLATES.find((t) => t.id === templateId) ?? AGENT_TEMPLATES[0]
 
@@ -105,6 +116,7 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
       extraSoul: cleanExtraSoul || undefined,
       langGraphEnabled,
       availableTools,
+      model,
     }
 
     try {
@@ -351,6 +363,29 @@ export function AgentForm({ agent, defaultTemplateId }: AgentFormProps) {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Modelo</Label>
+                <Select value={model} onValueChange={setModel} disabled={isLoading}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableModels.length > 0 ? (
+                      availableModels.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value={model}>{model}</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Modelos agênticos disponíveis na sua chave Anthropic.
+                </p>
               </div>
 
               <div className="space-y-2">

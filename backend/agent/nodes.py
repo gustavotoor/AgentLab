@@ -33,17 +33,17 @@ Respond in JSON only, no markdown:
 
 def _make_haiku(api_key: str) -> ChatAnthropic:
     return ChatAnthropic(
-        model="claude-3-haiku-20240307",
+        model="claude-haiku-4-5-20251001",
         api_key=api_key,
         max_tokens=256,
     )
 
 
-def _make_sonnet(api_key: str) -> ChatAnthropic:
+def _make_model(api_key: str, model: str) -> ChatAnthropic:
     return ChatAnthropic(
-        model="claude-3-5-sonnet-20241022",
+        model=model,
         api_key=api_key,
-        max_tokens=1024,
+        max_tokens=4096,
     )
 
 
@@ -70,7 +70,7 @@ async def classify_intent(state: AgentState, config: dict) -> dict:
     sanitized = sanitize(state["input"])
     injection_detected = sanitized.injection_detected
 
-    await emitter.data("model", "claude-3-haiku-20240307")
+    await emitter.data("model", "claude-haiku-4-5-20251001")
 
     if injection_detected:
         await emitter.data("security", "injection_detected")
@@ -275,7 +275,7 @@ async def generate_response(state: AgentState, config: dict) -> dict:
     if delay:
         await asyncio.sleep(delay)
 
-    model_name = "claude-3-5-sonnet-20241022"
+    model_name = agent_config.get("model", "claude-sonnet-4-6")
     await emitter.data("model", model_name)
 
     # Build system prompt
@@ -318,7 +318,7 @@ async def generate_response(state: AgentState, config: dict) -> dict:
 
     messages = list(state.get("messages", [])) + [HumanMessage(content=state["input_sanitized"])]
 
-    sonnet = _make_sonnet(agent_config["api_key"])
+    sonnet = _make_model(agent_config["api_key"], model_name)
 
     full_response = ""
     input_tokens = 0
@@ -338,7 +338,7 @@ async def generate_response(state: AgentState, config: dict) -> dict:
 
     latency_ms = int((time.monotonic() - start) * 1000)
     total_tokens = input_tokens + output_tokens
-    # Claude 3.5 Sonnet: $3/1M input, $15/1M output
+    # Approximate cost (Sonnet-class pricing: $3/1M input, $15/1M output)
     cost = (input_tokens * 3 + output_tokens * 15) / 1_000_000
 
     await emitter.data("response_tokens", output_tokens)

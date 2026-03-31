@@ -17,7 +17,7 @@ export function createAnthropicClient(apiKey: string) {
  * @returns {string} The model identifier
  */
 export function getDefaultModel(): string {
-  return 'claude-3-5-sonnet-20241022'
+  return 'claude-sonnet-4-6'
 }
 
 /**

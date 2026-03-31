@@ -110,6 +110,7 @@ export async function POST(req: Request) {
       template_id: agent.templateId,
       available_tools: agent.availableTools,
       api_key: apiKey,
+      model: agent.model ?? 'claude-sonnet-4-6',
       lang_graph_enabled: true,
     }
 

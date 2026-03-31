@@ -98,8 +98,8 @@ export async function POST(req: Request) {
       { role: 'user' as const, content: message },
     ]
 
-    // Create AI model with user's key
-    const model = createModel(apiKey)
+    // Create AI model with user's key and agent's chosen model
+    const model = createModel(apiKey, agent.model ?? undefined)
 
     // Stream response
     const result = streamText({

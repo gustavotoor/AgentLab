@@ -69,7 +69,7 @@ export default function OnboardingPage() {
     setIsLoading(true)
     try {
       await fetch('/api/user/complete-onboarding', { method: 'POST' })
-      await update({ onboardingDone: true })
+      await update({ onboardingDone: true, ...(apiKeySaved ? { apiKeyValid: true } : {}) })
       router.push('/dashboard')
     } catch {
       setIsLoading(false)

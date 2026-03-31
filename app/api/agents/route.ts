@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const { name, emoji, templateId, personality, tone, locale, extraSoul, langGraphEnabled, availableTools } = parsed.data
+    const { name, emoji, templateId, personality, tone, locale, extraSoul, langGraphEnabled, availableTools, model } = parsed.data
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
@@ -73,6 +73,7 @@ export async function POST(req: Request) {
         systemPrompt,
         langGraphEnabled: langGraphEnabled ?? false,
         availableTools: availableTools ?? [],
+        model: model ?? 'claude-sonnet-4-6',
         userId: session.user.id,
       },
     })

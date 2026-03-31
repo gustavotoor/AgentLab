@@ -42,6 +42,7 @@ class AgentConfig(BaseModel):
     template_id: str = Field(..., max_length=50)
     available_tools: list[str] = Field(default_factory=list, max_length=5)
     api_key: str = Field(..., min_length=20, max_length=300)
+    model: str = Field(default="claude-sonnet-4-6", max_length=100)
     lang_graph_enabled: bool = True
 
     def model_dump_safe(self) -> dict:
@@ -150,8 +151,8 @@ async def health():
 
     return {
         "status": "ok",
-        "model_sonnet": "claude-3-5-sonnet-20241022",
-        "model_haiku": "claude-3-haiku-20240307",
+        "model_default": "claude-sonnet-4-6",
+        "model_classifier": "claude-haiku-4-5-20251001",
         "tools_available": list(TOOL_WHITELIST),
         "langfuse_connected": langfuse_ok,
     }
