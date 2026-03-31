@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { generateToken, getTokenExpiry } from '@/lib/tokens'
 import { sendVerificationEmail } from '@/lib/email'
-import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { rateLimitAuth, getClientIp } from '@/lib/rate-limit'
 
 /**
  * POST /api/auth/resend-verification
@@ -11,7 +11,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit'
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req)
-    if (!rateLimit(`resend-verification:${ip}`, 5, 15 * 60 * 1000)) {
+    if (!(await rateLimitAuth(`resend-verification:${ip}`))) {
       return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 })
     }
 

@@ -26,6 +26,21 @@ export async function POST(req: Request) {
 
     const { apiKey } = parsed.data
 
+    // M3: Validate key against Anthropic API before saving
+    try {
+      const testRes = await fetch('https://api.anthropic.com/v1/models', {
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+      })
+      if (testRes.status === 401 || testRes.status === 403) {
+        return NextResponse.json({ error: 'Invalid API key. Please check and try again.' }, { status: 400 })
+      }
+    } catch {
+      // Network error — allow save anyway to not block users on transient failures
+    }
+
     // Encrypt and save
     const encrypted = encrypt(apiKey)
     const masked = maskApiKey(apiKey)
@@ -35,7 +50,7 @@ export async function POST(req: Request) {
       data: {
         apiKeyEncrypted: encrypted,
         apiKeyMasked: masked,
-        apiKeyValid: true, // We mark as valid and let first chat confirm
+        apiKeyValid: true,
       },
     })
 

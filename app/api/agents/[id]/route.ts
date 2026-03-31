@@ -63,12 +63,19 @@ export async function PATCH(req: Request, { params }: RouteParams) {
       select: { name: true },
     })
 
-    const merged = { ...existing, ...parsed.data }
+    // M5: strip HTML tags from user-supplied text fields to prevent stored XSS
+    const stripHtml = (s: string) => s.replace(/<[^>]*>/g, '').trim()
+    const sanitizedData = { ...parsed.data }
+    if (sanitizedData.name) sanitizedData.name = stripHtml(sanitizedData.name)
+    if (sanitizedData.personality) sanitizedData.personality = stripHtml(sanitizedData.personality)
+    if (sanitizedData.extraSoul) sanitizedData.extraSoul = stripHtml(sanitizedData.extraSoul)
+
+    const merged = { ...existing, ...sanitizedData }
     const systemPrompt = buildSystemPrompt(merged, { name: user?.name })
 
     const agent = await prisma.agent.update({
       where: { id },
-      data: { ...parsed.data, systemPrompt },
+      data: { ...sanitizedData, systemPrompt },
     })
 
     return NextResponse.json({ data: agent })

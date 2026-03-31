@@ -26,6 +26,18 @@ export async function POST(req: Request) {
 
     const { apiKey } = parsed.data
 
+    // M3: Validate key against OpenAI API before saving
+    try {
+      const testRes = await fetch('https://api.openai.com/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      })
+      if (testRes.status === 401 || testRes.status === 403) {
+        return NextResponse.json({ error: 'Invalid API key. Please check and try again.' }, { status: 400 })
+      }
+    } catch {
+      // Network error — allow save anyway to not block users on transient failures
+    }
+
     const encrypted = encrypt(apiKey)
     const masked = maskApiKey(apiKey)
 

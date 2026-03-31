@@ -6,7 +6,7 @@ import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { getTemplateById } from '@/lib/prompts'
 import { sanitize } from '@/lib/sanitizer'
-import { rateLimit } from '@/lib/rate-limit'
+import { rateLimitChat } from '@/lib/rate-limit'
 
 export const maxDuration = 120
 
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    if (!rateLimit(`chat:${session.user.id}`, 30, 60 * 60 * 1000)) {
+    if (!(await rateLimitChat(`chat:${session.user.id}`))) {
       return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 })
     }
 

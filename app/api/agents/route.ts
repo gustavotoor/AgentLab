@@ -55,14 +55,17 @@ export async function POST(req: Request) {
       select: { name: true },
     })
 
+    // M5: strip HTML tags from user-supplied text fields to prevent stored XSS
+    const stripHtml = (s: string) => s.replace(/<[^>]*>/g, '').trim()
+
     const agentData = {
-      name,
+      name: stripHtml(name),
       emoji,
       templateId,
-      personality,
+      personality: stripHtml(personality),
       tone,
       locale,
-      extraSoul,
+      extraSoul: extraSoul ? stripHtml(extraSoul) : extraSoul,
     }
 
     const systemPrompt = buildSystemPrompt(agentData, { name: user?.name })

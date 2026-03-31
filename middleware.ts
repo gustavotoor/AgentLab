@@ -1,6 +1,23 @@
 import { withAuth } from 'next-auth/middleware'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
+
+// Login rate limiter — created lazily (Edge-compatible via Upstash REST API)
+let loginRateLimiter: Ratelimit | null = null
+function getLoginRateLimiter(): Ratelimit | null {
+  if (loginRateLimiter) return loginRateLimiter
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    loginRateLimiter = new Ratelimit({
+      redis: Redis.fromEnv(),
+      limiter: Ratelimit.slidingWindow(10, '15 m'),
+      prefix: 'rl:login',
+      analytics: false,
+    })
+  }
+  return loginRateLimiter
+}
 
 /**
  * Middleware that protects (app) routes using NextAuth session checks.
@@ -10,9 +27,27 @@ import type { NextRequest } from 'next/server'
  * - Preserving callbackUrl for post-login redirects
  */
 export default withAuth(
-  function middleware(req: NextRequest) {
+  async function middleware(req: NextRequest) {
     const token = (req as NextRequest & { nextauth?: { token: unknown } }).nextauth?.token
     const { pathname } = req.nextUrl
+
+    // H2: Rate limit login attempts to prevent brute force
+    if (pathname === '/api/auth/callback/credentials' && req.method === 'POST') {
+      const limiter = getLoginRateLimiter()
+      if (limiter) {
+        const ip =
+          req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+          req.headers.get('x-real-ip') ??
+          'unknown'
+        const { success } = await limiter.limit(`login:${ip}`)
+        if (!success) {
+          return NextResponse.json(
+            { error: 'Too many login attempts. Please try again later.' },
+            { status: 429 }
+          )
+        }
+      }
+    }
 
     // Auth pages: redirect authenticated users to dashboard
     const authPages = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email']

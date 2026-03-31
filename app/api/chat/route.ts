@@ -6,7 +6,8 @@ import { prisma } from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { createModelForProvider } from '@/lib/ai'
 import { sanitize } from '@/lib/sanitizer'
-import { rateLimit } from '@/lib/rate-limit'
+import { rateLimitChat } from '@/lib/rate-limit'
+import { chatMessageSchema } from '@/lib/validations'
 
 export const maxDuration = 60
 
@@ -21,14 +22,26 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    if (!rateLimit(`chat:${session.user.id}`, 30, 60 * 60 * 1000)) {
+    if (!(await rateLimitChat(`chat:${session.user.id}`))) {
       return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 })
     }
 
-    const { agentId, conversationId, message } = await req.json()
+    // M2: validate input with Zod schema (enforces 10k char limit, required fields)
+    const body = await req.json()
+    const parsed = chatMessageSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      )
+    }
+    const { agentId, conversationId, message } = parsed.data
 
-    if (!agentId || !message) {
-      return NextResponse.json({ error: 'agentId and message are required' }, { status: 400 })
+    // M1: block injection — consistent with LangGraph endpoint
+    const { text: cleanMessage, injectionDetected } = sanitize(message)
+    if (injectionDetected) {
+      console.warn('[chat] Injection pattern blocked from user:', session.user.id)
+      return NextResponse.json({ error: 'Message contains disallowed content.' }, { status: 400 })
     }
 
     // Verify agent belongs to user
@@ -97,12 +110,12 @@ export async function POST(req: Request) {
       take: 20,
     })
 
-    // Save user message
+    // Save user message (use sanitized version)
     await prisma.message.create({
       data: {
         conversationId: convoId,
         role: 'user',
-        content: message,
+        content: cleanMessage,
       },
     })
 
@@ -113,7 +126,7 @@ export async function POST(req: Request) {
         role: m.role as 'user' | 'assistant',
         content: m.role === 'user' ? sanitize(m.content).text : m.content,
       })),
-      { role: 'user' as const, content: message },
+      { role: 'user' as const, content: cleanMessage },
     ]
 
     // Create AI model with user's key, provider, and agent's chosen model
@@ -142,7 +155,7 @@ export async function POST(req: Request) {
           })
 
           if (!convo?.title && (convo?._count?.messages ?? 0) <= 2) {
-            const title = message.slice(0, 60) + (message.length > 60 ? '...' : '')
+            const title = cleanMessage.slice(0, 60) + (cleanMessage.length > 60 ? '...' : '')
             await prisma.conversation.update({
               where: { id: convoId },
               data: { title },
