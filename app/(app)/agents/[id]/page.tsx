@@ -40,6 +40,8 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [delayMode, setDelayMode] = useState(false)
   const [labOpen, setLabOpen] = useState(true)
+  // Stable key that only changes on explicit new conversation, not on first-message creation
+  const [chatKey, setChatKey] = useState(0)
 
   useEffect(() => {
     async function init() {
@@ -86,12 +88,14 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
     setCurrentConvoId(undefined)
     setCurrentMessages([])
     setSseEvents([])
+    setChatKey((k) => k + 1)
   }
 
   const handleSelectConversation = async (convoId: string) => {
     if (!agentId) return
     setCurrentConvoId(convoId)
     setSseEvents([])
+    setChatKey((k) => k + 1)
 
     try {
       const res = await fetch(`/api/conversations/${agentId}/${convoId}`)
@@ -167,7 +171,7 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
         <div className={`flex-1 overflow-hidden ${showLab ? 'border-r border-border' : ''}`}>
           {isLangGraph ? (
             <ChatWindowLangGraph
-              key={currentConvoId ?? 'new'}
+              key={chatKey}
               agent={agent}
               conversationId={currentConvoId}
               initialMessages={currentMessages}
@@ -179,7 +183,7 @@ export default function AgentChatPage({ params, searchParams }: PageProps) {
             />
           ) : (
             <ChatWindow
-              key={currentConvoId ?? 'new'}
+              key={chatKey}
               agent={agent}
               conversationId={currentConvoId}
               initialMessages={currentMessages}

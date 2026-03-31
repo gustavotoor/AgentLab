@@ -101,6 +101,8 @@
     "noAgents": "No agents yet",
     "noAgentsDesc": "Create your first agent to get started",
     "createAgent": "Create Agent",
+    "edit": "Edit",
+    "delete": "Delete",
     "editAgent": "Edit Agent",
     "deleteAgent": "Delete Agent",
     "deleteConfirm": "Are you sure you want to delete this agent? This action cannot be undone.",
