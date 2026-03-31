@@ -135,25 +135,12 @@ export function ChatWindowLangGraph({
               key={message.id}
               message={message}
               agentEmoji={agent.emoji}
+              isStreaming={message.isStreaming}
             />
           ))}
         </AnimatePresence>
 
-        {/* Streaming message */}
-        {streamingContent && (
-          <MessageBubble
-            message={{
-              id: "streaming",
-              role: "assistant",
-              content: streamingContent,
-              createdAt: new Date(),
-            }}
-            agentEmoji={agent.emoji}
-            isStreaming
-          />
-        )}
-
-        {/* Thinking indicator */}
+        {/* Thinking indicator — shown while waiting for first chunk */}
         {isLoading && !streamingContent && (
           <div className="flex items-center gap-3 py-2 px-4">
             <span className="text-xl">{agent.emoji}</span>

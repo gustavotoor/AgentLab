@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Copy, Check } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 
 interface MessageBubbleProps {
@@ -57,8 +59,40 @@ export function MessageBubble({ message, agentEmoji = '🤖', isStreaming = fals
               : 'bg-muted text-foreground rounded-tl-sm'
           )}
         >
-          <div className="whitespace-pre-wrap break-words">
-            {message.content}
+          <div className="break-words">
+            {isUser ? (
+              <span className="whitespace-pre-wrap">{message.content}</span>
+            ) : (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                  h1: ({ children }) => <h1 className="text-base font-bold mb-1 mt-2 first:mt-0">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-sm font-bold mb-1 mt-2 first:mt-0">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 mt-2 first:mt-0">{children}</h3>,
+                  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
+                  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                  code: ({ children, className }) => {
+                    const isBlock = className?.includes('language-')
+                    return isBlock ? (
+                      <code className="block bg-black/20 dark:bg-white/10 rounded px-3 py-2 my-2 text-xs font-mono overflow-x-auto whitespace-pre">
+                        {children}
+                      </code>
+                    ) : (
+                      <code className="bg-black/20 dark:bg-white/10 rounded px-1 py-0.5 text-xs font-mono">{children}</code>
+                    )
+                  },
+                  pre: ({ children }) => <pre className="my-2">{children}</pre>,
+                  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-2 border-current/30 pl-3 italic my-2 opacity-80">{children}</blockquote>
+                  ),
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            )}
             {isStreaming && (
               <span className="inline-block w-0.5 h-4 bg-current ml-0.5 animate-pulse align-middle" />
             )}
