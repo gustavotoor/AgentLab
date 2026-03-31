@@ -1,5 +1,5 @@
 # Spec 05 — Agent CRUD
-**Status:** Ready to implement  
+**Status:** Implemented
 **Priority:** P1  
 **Estimated effort:** 3–4h  
 **Depends on:** spec/00-architecture.md, spec/04-agent-store.md
@@ -180,3 +180,29 @@ Cascades: deletes Conversations → Messages → Agent
 
 ## Definition of Done
 All acceptance criteria checked. Full CRUD works. System prompt builds correctly. No unauthorized access possible.
+
+---
+
+## ⚡ Post-Build Additions
+
+> These items were **not in the original spec** and were added after the initial build was complete.
+
+### New Agent Fields
+
+Two new fields were added to the Agent creation/edit form (Step 2 — Customize):
+
+- **Provider** (Select: `Anthropic` / `OpenAI`) — only shown if both keys are configured
+- **Model** (Select — dynamic dropdown) — populated by `GET /api/models?provider=[provider]`; shows only agentic-capable models for the selected provider. Default: `claude-sonnet-4-6` for Anthropic.
+
+Two new fields added to Step 3 — Advanced:
+
+- **Lab Mode** (Toggle) — enables LangGraph graph execution for this agent instead of direct streaming
+- **Available Tools** (Multi-select) — tools the LangGraph agent can invoke (e.g. `web_search`, `code_interpreter`)
+
+### New API Endpoints
+
+- `GET /api/models?provider=anthropic|openai` — returns filtered list of agentic models for the requested provider, using the user's stored BYOK key.
+
+### Updated Schema Reference
+
+See spec 00 Post-Build Additions for the full updated Agent model fields.

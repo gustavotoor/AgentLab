@@ -16,7 +16,7 @@ app = FastAPI(title="AgentLab LangGraph Backend", version="1.0.0")
 
 INTERNAL_SECRET = os.getenv("INTERNAL_SECRET", "")
 # FRONTEND_URL pode ser múltiplos valores separados por vírgula
-# Ex: "https://agentlab.gustavokarsten.com,http://localhost:3000"
+# Ex: "https://agentlab.exemplo.com,http://localhost:3000"
 _frontend_urls = os.getenv("FRONTEND_URL", "http://localhost:3000")
 ALLOWED_ORIGINS = [u.strip() for u in _frontend_urls.split(",") if u.strip()]
 

@@ -1,5 +1,5 @@
 # Spec 02 — Onboarding
-**Status:** Ready to implement  
+**Status:** Implemented
 **Priority:** P1  
 **Estimated effort:** 2–3h  
 **Depends on:** spec/01-auth.md

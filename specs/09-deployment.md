@@ -1,5 +1,5 @@
 # Spec 09 — Deployment & Documentation
-**Status:** Ready to implement  
+**Status:** Implemented
 **Priority:** P2  
 **Estimated effort:** 2h  
 **Depends on:** All other specs

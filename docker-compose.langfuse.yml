@@ -1,12 +1,12 @@
 version: '3.8'
 
-# Langfuse self-hosted usando o PostgreSQL existente do projeto.
+# Langfuse self-hosted — observabilidade para o Modo Lab do AgentLab.
 #
 # Antes de subir, crie o banco no seu Postgres:
-#   psql -U gustavokkars -c "CREATE DATABASE langfuse;"
+#   psql -U <seu-usuario> -c "CREATE DATABASE langfuse;"
 #
-# No Dokploy: criar novo serviço "Docker Compose" apontando para este arquivo.
-# Domínio: langfuse.gustavokarsten.com → porta interna 3000
+# Sobe o servidor Langfuse na porta 3010.
+# Configure LANGFUSE_URL com seu domínio ou use http://localhost:3010.
 
 services:
   langfuse:

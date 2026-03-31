@@ -1,5 +1,5 @@
 # Spec 06 — Chat Interface
-**Status:** Ready to implement  
+**Status:** Implemented
 **Priority:** P1  
 **Estimated effort:** 4–5h  
 **Depends on:** spec/00-architecture.md, spec/05-agent-crud.md
@@ -188,3 +188,27 @@ e:{"finishReason":"stop","usage":{"promptTokens":12,"completionTokens":8}}
 
 ## Definition of Done
 All acceptance criteria checked. Streaming works. Conversation history persists. Copy works. Mobile layout functional.
+
+---
+
+## ⚡ Post-Build Additions
+
+> These items were **not in the original spec** and were added after the initial build was complete.
+
+### Markdown Rendering
+
+Assistant messages now render Markdown (bold, italic, code blocks, lists, links). This was not specified originally — messages were plain text. A sanitizer (`lib/sanitizer.ts`) strips unsafe HTML before rendering.
+
+### LangGraph Chat Variant
+
+When `agent.langGraphEnabled = true`, the chat page renders `ChatWindowLangGraph.tsx` instead of the standard `ChatWindow.tsx`. This variant:
+
+- Sends messages to `POST /api/chat/langgraph` (SSE) instead of `POST /api/chat`
+- Shows a **LabPanel** alongside the chat (collapsible, right side):
+  - **ExecutionLog** — terminal-style real-time log of graph node execution
+  - **GraphDiagram** — SVG visualization of the LangGraph pipeline
+  - **ObservabilityPanel** — Langfuse trace link for the current run
+- Uses `useAgentStream` hook for SSE consumption
+- SSE events: `node_start`, `node_data`, `node_complete`, `message_chunk`, `done`, `error`
+
+> See spec 11 (LangGraph Lab) for full details.

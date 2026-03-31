@@ -1,5 +1,5 @@
 # Spec 03 — Dashboard
-**Status:** Ready to implement  
+**Status:** Implemented
 **Priority:** P1  
 **Estimated effort:** 2h  
 **Depends on:** spec/00-architecture.md, spec/01-auth.md

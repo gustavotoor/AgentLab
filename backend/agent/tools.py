@@ -19,7 +19,9 @@ def web_search(query: str) -> str:
     SearXNG is a self-hosted meta-search engine — no API key required.
     Configure SEARXNG_URL to point to your instance.
     """
-    searxng_url = os.getenv("SEARXNG_URL", "https://search.dockplusai.io")
+    searxng_url = os.getenv("SEARXNG_URL", "")
+    if not searxng_url:
+        return "Web search não configurado. Defina SEARXNG_URL com a URL de uma instância SearXNG."
     try:
         response = httpx.get(
             f"{searxng_url}/search",

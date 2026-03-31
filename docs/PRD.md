@@ -1,3 +1,8 @@
+> **Nota:** Documento de produto interno, mantido para referência histórica.
+> Para as especificações formais, veja [`specs/`](../specs/).
+
+---
+
 # PRD — AgentLab
 **Versão:** 1.1  
 **Data:** 2026-03-28  

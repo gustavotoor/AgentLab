@@ -1,5 +1,5 @@
 # Spec 08 — Landing Page
-**Status:** Ready to implement  
+**Status:** Implemented
 **Priority:** P2  
 **Estimated effort:** 3h  
 **Depends on:** spec/00-architecture.md  

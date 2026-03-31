@@ -1,5 +1,5 @@
 # Spec 07 — Settings
-**Status:** Ready to implement  
+**Status:** Implemented
 **Priority:** P2  
 **Estimated effort:** 2–3h  
 **Depends on:** spec/00-architecture.md, spec/01-auth.md
@@ -173,3 +173,35 @@ Allow users to manage their account, API key, appearance preferences, and securi
 
 ## Definition of Done
 All acceptance criteria checked. All tabs functional. API key encryption working. Account deletion cascades correctly. Theme and locale persist.
+
+---
+
+## ⚡ Post-Build Additions
+
+> These items were **not in the original spec** and were added after the initial build was complete.
+
+### New Tab: OpenAI Key
+
+A second API key tab (or section within the existing "API Key" tab) was added to support multi-provider BYOK:
+
+**Display:**
+- Status indicator: ✅ Valid / ❌ Invalid or Missing
+- If set: shows masked key `sk-...xxxx`
+- If not set: shows "No OpenAI API key configured"
+
+**Actions:**
+- Input field: paste OpenAI API key
+- "Validate & Save" button → tests against `GET https://api.openai.com/v1/models`
+- On success: encrypts + saves + shows masked version + sets `openaiKeyValid = true`
+- "Delete key" button (destructive) → clears OpenAI key fields
+
+**New API Endpoints:**
+
+### POST /api/user/openai-key
+```json
+{ "key": "sk-..." }
+```
+Validates against OpenAI API, encrypts, stores. Response 200: `{ "masked": "sk-...xxxx" }`
+
+### DELETE /api/user/openai-key
+Response 204: OpenAI key cleared.

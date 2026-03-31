@@ -1,5 +1,5 @@
 # Spec 01 — Authentication
-**Status:** Ready to implement  
+**Status:** Implemented
 **Priority:** P0 — Blocks all other features  
 **Estimated effort:** 4–6h  
 **Depends on:** spec/00-architecture.md

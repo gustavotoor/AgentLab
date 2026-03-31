@@ -6,7 +6,7 @@ services:
     container_name: agentlab-db
     environment:
       POSTGRES_USER: agentlab
-      POSTGRES_PASSWORD: agentlab_secret
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentlab_secret}
       POSTGRES_DB: agentlab
     ports:
       - '5432:5432'
@@ -47,7 +47,7 @@ services:
     ports:
       - '3000:3000'
     environment:
-      DATABASE_URL: postgresql://agentlab:agentlab_secret@postgres:5432/agentlab
+      DATABASE_URL: postgresql://agentlab:${POSTGRES_PASSWORD:-agentlab_secret}@postgres:5432/agentlab
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}

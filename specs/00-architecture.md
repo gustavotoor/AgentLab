@@ -1,5 +1,5 @@
 # Spec 00 — Architecture & Foundation
-**Status:** Ready to implement  
+**Status:** Implemented
 **Priority:** P0 — Must be done first  
 **Estimated effort:** 2–3h
 
@@ -246,3 +246,78 @@ NEXT_PUBLIC_APP_NAME="AgentLab"
 
 ## Definition of Done
 All acceptance criteria checked. `npm run build` exits 0. Docker Compose brings up both services and app responds to `GET /`.
+
+---
+
+## ⚡ Post-Build Additions
+
+> These items were **not in the original spec** and were added after the initial build was complete.
+
+### New Database Fields
+
+**User model:**
+- `openaiKeyEncrypted String?` — AES-256-GCM encrypted OpenAI API key
+- `openaiKeyMasked String?` — "sk-...xxxx" masked version
+- `openaiKeyValid Boolean @default(false)` — validity flag
+
+**Agent model:**
+- `provider String @default("anthropic")` — AI provider: `"anthropic"` | `"openai"`
+- `model String @default("claude-sonnet-4-6")` — selected model ID (dynamic per-agent)
+- `langGraphEnabled Boolean @default(false)` — toggles LangGraph lab mode
+- `availableTools String[] @default([])` — list of tools available to the LangGraph agent
+
+### New Services
+
+- **Python FastAPI backend** at `backend/` (port 8000 in Docker) — handles LangGraph graph execution. Has its own `Dockerfile.backend` and is included in `docker-compose.yml`.
+- **Langfuse observability** — optional self-hosted stack via `docker-compose.langfuse.yml`
+
+### New Folder Structure Entries
+
+```
+backend/                          # Python FastAPI + LangGraph microservice
+├── main.py
+├── requirements.txt
+├── Dockerfile
+├── agent/                        # LangGraph graph nodes
+├── observability/                # Langfuse integration
+├── security/                     # Auth middleware
+└── streaming/                    # SSE protocol handlers
+
+components/
+└── lab/                          # LangGraph lab UI components
+    ├── LabPanel.tsx
+    ├── ExecutionLog.tsx
+    ├── GraphDiagram.tsx
+    └── ObservabilityPanel.tsx
+
+hooks/
+├── useAgentStream.ts             # SSE stream consumption hook
+└── useLogAnimation.ts            # Terminal log animation hook
+
+types/
+└── agent-stream.ts               # SSE event types
+
+lib/
+└── sanitizer.ts                  # HTML/content sanitization
+
+app/api/
+├── chat/langgraph/route.ts       # LangGraph SSE bridge
+└── models/route.ts               # Dynamic model list (Anthropic + OpenAI)
+```
+
+### New Environment Variables
+
+```env
+# OpenAI (optional — for multi-provider BYOK)
+OPENAI_API_KEY=""                # Only needed if user brings OpenAI key
+
+# LangGraph backend
+LANGGRAPH_BACKEND_URL="http://localhost:8000"
+
+# Langfuse observability (optional)
+LANGFUSE_PUBLIC_KEY=""
+LANGFUSE_SECRET_KEY=""
+LANGFUSE_HOST="http://localhost:3005"
+```
+
+> See spec 10 (Multi-Provider) and spec 11 (LangGraph Lab) for full details.
