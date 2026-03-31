@@ -43,6 +43,7 @@ class AgentConfig(BaseModel):
     available_tools: list[str] = Field(default_factory=list, max_length=5)
     api_key: str = Field(..., min_length=20, max_length=300)
     model: str = Field(default="claude-sonnet-4-6", max_length=100)
+    provider: str = Field(default="anthropic", pattern=r"^(anthropic|openai)$")
     lang_graph_enabled: bool = True
 
     def model_dump_safe(self) -> dict:

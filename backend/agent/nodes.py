@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from agent.state import AgentState
@@ -31,20 +32,24 @@ Respond in JSON only, no markdown:
 {"intent": "...", "sub_intent": "...", "confidence": 0.0}"""
 
 
-def _make_haiku(api_key: str) -> ChatAnthropic:
-    return ChatAnthropic(
-        model="claude-haiku-4-5-20251001",
-        api_key=api_key,
-        max_tokens=256,
-    )
+_FAST_MODEL = {
+    "anthropic": "claude-haiku-4-5-20251001",
+    "openai": "gpt-4o-mini",
+}
 
 
-def _make_model(api_key: str, model: str) -> ChatAnthropic:
-    return ChatAnthropic(
-        model=model,
-        api_key=api_key,
-        max_tokens=4096,
-    )
+def _make_fast_client(api_key: str, provider: str) -> ChatAnthropic | ChatOpenAI:
+    """Returns a cheap/fast model for routing and classification tasks."""
+    if provider == "openai":
+        return ChatOpenAI(model=_FAST_MODEL["openai"], api_key=api_key, max_tokens=256)
+    return ChatAnthropic(model=_FAST_MODEL["anthropic"], api_key=api_key, max_tokens=256)
+
+
+def _make_model(api_key: str, model: str, provider: str) -> ChatAnthropic | ChatOpenAI:
+    """Returns the main conversational model for the configured provider."""
+    if provider == "openai":
+        return ChatOpenAI(model=model, api_key=api_key, max_tokens=4096)
+    return ChatAnthropic(model=model, api_key=api_key, max_tokens=4096)
 
 
 def _estimate_tokens(text: str) -> int:
@@ -70,7 +75,9 @@ async def classify_intent(state: AgentState, config: dict) -> dict:
     sanitized = sanitize(state["input"])
     injection_detected = sanitized.injection_detected
 
-    await emitter.data("model", "claude-haiku-4-5-20251001")
+    provider = agent_config.get("provider", "anthropic")
+    fast_model_name = _FAST_MODEL.get(provider, _FAST_MODEL["anthropic"])
+    await emitter.data("model", fast_model_name)
 
     if injection_detected:
         await emitter.data("security", "injection_detected")
@@ -85,7 +92,7 @@ async def classify_intent(state: AgentState, config: dict) -> dict:
             "events": [{"type": "classify_intent", "intent": "conversation", "injection": True}],
         }
 
-    haiku = _make_haiku(agent_config["api_key"])
+    haiku = _make_fast_client(agent_config["api_key"], provider)
     messages = [
         SystemMessage(content=INTENT_PROMPT),
         HumanMessage(content=sanitized.text),
@@ -316,16 +323,22 @@ async def generate_response(state: AgentState, config: dict) -> dict:
             "events": [{"type": "generate_response", "tokens": 0}],
         }
 
-    messages = list(state.get("messages", [])) + [HumanMessage(content=state["input_sanitized"])]
+    provider = agent_config.get("provider", "anthropic")
+    # System prompt via SystemMessage works for both Anthropic and OpenAI in LangChain
+    messages = (
+        [SystemMessage(content=system_content)]
+        + list(state.get("messages", []))
+        + [HumanMessage(content=state["input_sanitized"])]
+    )
 
-    sonnet = _make_model(agent_config["api_key"], model_name)
+    sonnet = _make_model(agent_config["api_key"], model_name, provider)
 
     full_response = ""
     input_tokens = 0
     output_tokens = 0
     start = time.monotonic()
 
-    async for chunk in sonnet.astream(messages, config={"system": system_content}):
+    async for chunk in sonnet.astream(messages):
         if hasattr(chunk, "content") and chunk.content:
             full_response += chunk.content
             await queue.put({"type": "message_chunk", "data": {"content": chunk.content, "delta": True}})
